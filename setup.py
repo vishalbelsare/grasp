@@ -6,7 +6,7 @@ PATH = os.path.dirname(__file__)
 
 setup(
                   name = 'grasp',
-               version = '3.2.3',
+               version = '3.2.5',
            description = 'Simple NLP toolkit',
                license = 'BSD',
                 author = 'Textgain',
