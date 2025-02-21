@@ -37,11 +37,11 @@ for e in dom(wikipedia('cat', language='en'))('p'):
     print(plain(e))
 ```
 
-**Find opinions** with `twitter.seach(str)`:
+**Find opinions** with `bluesky.seach(str)`:
 
 ```py
-for tweet in first(10, twitter.search('from:textgain')): # latest 10
-    print(tweet.id, tweet.text, tweet.date)
+for post in first(10, bluesky.search('cats')): # latest 10
+    print(post.id, post.text, post.date)
 ```
 
 **Deploy APIs** with `App`. Works with WSGI and Nginx:

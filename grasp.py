@@ -634,7 +634,7 @@ class tmp(object):
         except:
             pass
 
-# data = '"username", "tweet", "likes"\n'
+# data = '"message", "date", "likes"\n'
 # 
 # with tmp(data) as f:
 #     for row in csv(f.name):
@@ -1557,10 +1557,10 @@ def style(s, bins=[0.01 * i for i in range(0, 10)] +
     return v
 
 # data = []
-# for id, tweet, date in csv(cd('spam.csv')):
-#     data.append((v(tweet), 'spam'))
-# for id, tweet, date in csv(cd('real.csv')):
-#     data.append((v(tweet), 'real'))
+# for id, post, date in csv(cd('spam.csv')):
+#     data.append((v(post), 'spam'))
+# for id, post, date in csv(cd('real.csv')):
+#     data.append((v(post), 'real'))
 # 
 # p = Perceptron(examples=data, n=10)
 # p.save(open('spam-model.json', 'w'))
@@ -2423,10 +2423,10 @@ def F1(P, R):
     return 2.0 * P * R / (P + R or 1)
 
 # data = []
-# for id, username, tweet, date in csv(cd('spam.csv')):
-#     data.append((v(tweet), 'spam'))
-# for id, username, tweet, date in csv(cd('real.csv')):
-#     data.append((v(tweet), 'real'))
+# for id, username, post, date in csv(cd('spam.csv')):
+#     data.append((v(post), 'spam'))
+# for id, username, post, date in csv(cd('real.csv')):
+#     data.append((v(post), 'real'))
 # 
 # print(kfoldcv(Perceptron, data, k=3, n=5, debug=True)) # ~ P 0.80 R 0.80
 
@@ -4584,16 +4584,50 @@ setattr(google, 'annotate', annotate)
 # with tmp(download('http://goo.gl/5GTvTe'), 'wb') as f:
 #     print(google.annotate(f.name, key='***'))
 
+#---- BLUESKY -------------------------------------------------------------------------------------
+
+Post = collections.namedtuple('Post', ('id', 'text', 'date', 'language', 'author', 'likes'))
+
+class Bluesky(object):
+
+    def search(self, q, language='', delay=1, cached=False, key=None, **kwargs):
+        """ Returns an iterator of posts.
+        """
+        r = 'https://public.api.bsky.app/xrpc/app.bsky.feed.searchPosts' + \
+            '?author=' + '' + \
+            '&sort='   + 'latest' + \
+            '&lang='   + language + \
+            '&q='      + urllib.parse.quote(b(q))
+
+        r = download(r, delay=delay, cached=cached, **kwargs)
+        r = json.loads(r and u(r) or '{}')
+
+        for v in r.get('posts', ()):
+            yield Post(
+                v.get('cid'                        ) or  '',
+                v.get('record', {}).get('text'     ) or  '',
+                v.get('record', {}).get('createdAt') or  '',
+              ( v.get('record', {}).get('langs'    ) or [''])[0],
+                v.get('author', {}).get('handle'   ) or  '',
+                v.get('likeCount'                  ) or  0
+            )
+
+    def __call__(self, *args, **kwargs):
+        return self.search(*args, **kwargs)
+
+bluesky = Bluesky()
+
+# for post in bluesky('cats', language='en'):
+#     print(post.text)
+
 #---- TWITTER -------------------------------------------------------------------------------------
 
 keys['Twitter'] = ''
 
-Tweet = collections.namedtuple('Tweet', ('id', 'text', 'date', 'language', 'author', 'likes'))
-
 class Twitter(object):
 
     def search(self, q, language='', delay=4, cached=False, key=None, **kwargs):
-        """ Returns an iterator of tweets.
+        """ Returns an iterator of posts.
         """
         k = {
             'X-RapidAPI-Host' : 'twitter-api45.p.rapidapi.com',
@@ -4611,7 +4645,7 @@ class Twitter(object):
         r = json.loads(r and u(r) or '{}')
 
         for v in r.get('timeline', ()):
-            yield Tweet(
+            yield Post(
                 v.get('tweet_id'   ) or '',
                 v.get('text'       ) or '',
                 v.get('created_at' ) or '',
@@ -4629,8 +4663,8 @@ class Twitter(object):
 
 twitter = Twitter()
 
-# for tweet in twitter('cats', language='en'):
-#     print(tweet.text)
+# for post in twitter('cats', language='en'):
+#     print(post.text)
 
 #---- WIKIPEDIA -----------------------------------------------------------------------------------
 
