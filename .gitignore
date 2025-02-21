@@ -6,3 +6,4 @@ dev/
 dist/
 grasp.egg-info/
 WordNet-3.0/
+keys.json
