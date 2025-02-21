@@ -37,7 +37,7 @@ for e in dom(wikipedia('cat', language='en'))('p'):
     print(plain(e))
 ```
 
-**Find opinions** with `bluesky.seach(str)`:
+**Find opinions** with `bluesky.search(str)`:
 
 ```py
 for post in first(10, bluesky.search('cats')): # latest 10
