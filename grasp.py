@@ -2,12 +2,11 @@
 
 ##### GRASP.PY ####################################################################################
 
-__version__   =  '3.2.4'
-__license__   =  'BSD'
-__credits__   = ['Tom De Smedt', 'Guy De Pauw', 'Walter Daelemans']
-__email__     =  'info@textgain.com'
-__author__    =  'Textgain'
-__copyright__ =  'Textgain'
+__version__   = '3.2.5'
+__license__   = 'BSD'
+__email__     = 'info@textgain.com'
+__author__    = 'Textgain'
+__copyright__ = 'Textgain'
 
 ###################################################################################################
 
@@ -4451,8 +4450,8 @@ def sniff(url, *args, **kwargs):
 # https://console.developers.google.com/apis/dashboard
 
 keys = {
-    'Google' : 'AIzaSyCqy-sxq6gZGAKxsoSfDHvjHgaW-M__T94',
-    'Bing'   : '78b5e99618mshdf023480e605b76p149c54jsn83432d326a65'
+    'Google' : '',
+    'Bing'   : '',
 }
 
 Result = collections.namedtuple('Result', ('url', 'text', 'date'))
@@ -4587,7 +4586,7 @@ setattr(google, 'annotate', annotate)
 
 #---- TWITTER -------------------------------------------------------------------------------------
 
-keys['Twitter'] = '78b5e99618mshdf023480e605b76p149c54jsn83432d326a65'
+keys['Twitter'] = ''
 
 Tweet = collections.namedtuple('Tweet', ('id', 'text', 'date', 'language', 'author', 'likes'))
 
@@ -4617,6 +4616,8 @@ class Twitter(object):
                 v.get('text'       ) or '',
                 v.get('created_at' ) or '',
               ( v.get('lang'       ) or '').replace('und', '').replace('zxx', ''),
+                v.get('author', {} )
+                 .get('screen_name') or 
                 v.get('screen_name') or '',
                 v.get('favorites'  ) or 0
             )
@@ -5421,20 +5422,23 @@ def markdown(s):
     """ Returns the HTML-formatted string.
     """
     s = s.strip()
-    s = re.sub(r'(^|\n)#{4} (.*?)(\n|$)'    , '\\1<h4>\\2</h4>\\3'       , s) # #### h4
-    s = re.sub(r'(^|\n)#{3} (.*?)(\n|$)'    , '\\1<h3>\\2</h3>\\3'       , s) # ### h3
-    s = re.sub(r'(^|\n)#{2} (.*?)(\n|$)'    , '\\1<h2>\\2</h2>\\3'       , s) # ## h2
-    s = re.sub(r'(^|\n)#{1} (.*?)(\n|$)'    , '\\1<h1>\\2</h1>\\3'       , s) # # h1
-    s = re.sub(r'\[(.*?)\]\((.*?)\)'        , '<a href="\\2">\\1</a>'    , s) # [a](href)
-    s = re.sub(r'\*{2}(?=\S)(.*?\S)\*{2}'   , '<b>\\1</b>'               , s) # **b**
-    s = re.sub(r'\*{1}(?=\S)(.*?\S)\*{1}'   , '<i>\\1</i>'               , s) # *i*
-    s = re.sub(r'\`{1}(?=\S)(.*?\S)\`{1}'   , '<code>\\1</code>'         , s) # `code`
-    s = re.sub(r'(^|\n)[-\*] (.*?)(?=\n|$)' , '\\1<ul><li>\\2</li></ul>' , s) # - li
-    s = re.sub(r'(^|\n)\d+\. (.*?)(?=\n|$)' , '\\1<ol><li>\\2</li></ol>' , s) # 1. ol
-    s = re.sub(r'(?m)</ul>\n<ul>'           , '\n'                       , s)
-    s = re.sub(r'(?m)</ol>\n<ol>'           , '\n'                       , s)
-    s = re.sub(r'(?s)(.*\S.*)'              , '<p>\\1</p>'               , s)
-    s = re.sub(r'\s*\n\s*\n\s*'             , '</p>\n\n<p>'              , s)
+    s = re.sub(r'(^|\n)#{1} (.*?)(?=\n|$)' , '\\1<h1>\\2</h1>'          , s) # # h1
+    s = re.sub(r'(^|\n)#{2} (.*?)(?=\n|$)' , '\\1<h2>\\2</h2>'          , s) # ## h2
+    s = re.sub(r'(^|\n)#{3} (.*?)(?=\n|$)' , '\\1<h3>\\2</h3>'          , s) # ### h3
+    s = re.sub(r'(^|\n)#{4} (.*?)(?=\n|$)' , '\\1<h4>\\2</h4>'          , s) # #### h4
+    s = re.sub(r'\[(.*?)\]\((.*?)\)'       , '<a href="\\2">\\1</a>'    , s) # [a](href)
+    s = re.sub(r'\*{2}(?=\S)(.*?\S)\*{2}'  , '<b>\\1</b>'               , s) # **b**
+    s = re.sub(r'\*{1}(?=\S)(.*?\S)\*{1}'  , '<i>\\1</i>'               , s) # *i*
+    s = re.sub(r'\`{1}(?=\S)(.*?\S)\`{1}'  , '<code>\\1</code>'         , s) # `code`
+    s = re.sub(r'(^|\n)[-*] (.*?)(?=\n|$)' , '\\1<ul><li>\\2</li></ul>' , s) # - li
+    s = re.sub(r'(^|\n)\d\. (.*?)(?=\n|$)' , '\\1<ol><li>\\2</li></ol>' , s) # 1. ol
+    s = re.sub(r'(?m)</ul>\n<ul>'          , '\n'                       , s)
+    s = re.sub(r'(?m)</ol>\n<ol>'          , '\n'                       , s)
+    s = re.sub(r'(?s)(.*\S.*)'             , '<p>\\1</p>'               , s)
+    s = re.sub(r'\s*\n\s*\n\s*'            , '</p>\n\n<p>'              , s)
+    s = re.sub(r'<p><h([1234])>'           , '<h\\1>'                   , s)
+    s = re.sub(r'</h([1234])></p>'         , '</h\\1>'                  , s)
+    s = re.sub(r'<a href="">(.*?)</a>'     , '<a href="\\1">\\1</a>'    , s)
     return s
 
 md = markdown
@@ -6751,3 +6755,8 @@ def setup(src='https://github.com/textgain/grasp/blob/master/', language=('en',)
                 f.close()
             except NotFound:
                 pass
+
+try:
+    keys.update(json.load(open(cd('keys.json'), 'rb')))
+except:
+    pass

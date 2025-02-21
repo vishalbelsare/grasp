@@ -2,12 +2,11 @@
 
 ##### SVG.PY ######################################################################################
 
-__version__   =  '1.4'
-__license__   =  'BSD'
-__credits__   = ['Tom De Smedt', 'Guy De Pauw']
-__email__     =  'info@textgain.com'
-__author__    =  'Textgain'
-__copyright__ =  'Textgain'
+__version__   = '1.4'
+__license__   = 'BSD'
+__email__     = 'info@textgain.com'
+__author__    = 'Textgain'
+__copyright__ = 'Textgain'
 
 ###################################################################################################
 
