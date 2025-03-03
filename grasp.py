@@ -4641,7 +4641,7 @@ class Twitter(object):
       # r = 'https://twitter-api45.p.rapidapi.com/timeline.php' + \
       #     '?screenname=' + q.lstrip('@')
 
-        r = download(r, headers=k, delay=delay, cached=cached, **kwargs) # 1000/hr
+        r = download(r, headers=k, delay=delay, cached=cached, **kwargs)
         r = json.loads(r and u(r) or '{}')
 
         for v in r.get('timeline', ()):
