@@ -382,6 +382,14 @@ def steps(v1, v2):
     else:
         return 2
 
+def floats(s):
+    """ Returns a list of float from str.
+    """
+    a = re.findall(r'\d+\.?\d*|\.\d+', s) # '.5'
+    a = map(float, a)
+    a = list(a)
+    return a
+
 #---- STATISTICS ----------------------------------------------------------------------------------
 
 def avg(a):
@@ -459,9 +467,11 @@ class Color(object):
     def __init__(self, *v, **k):
         """ A color with RGBA values between 0.0-1.0.
         """
-        if v and isinstance(v[0], (list, tuple)):        # Color(list)
-            v = v[0]
-        if len(v) == 0:                                  # Color()
+        n = k.get('base', 1)
+
+        if v and isinstance(v[0], (str, unicode)):       # Color(str)
+            r, g, b, a = floats(v[0]); a*=255; n=255
+        elif len(v) == 0:                                # Color()
             r, g, b, a = 0, 0, 0, 0
         elif len(v) == 1 and v[0] is None:               # Color(None)
             r, g, b, a = 0, 0, 0, 0
@@ -477,8 +487,6 @@ class Color(object):
             r, g, b, a = v[0], v[1], v[2], v[3]
         if k.get('mode') == HSB:                         # Color(h, s, b, a, mode=HSB)
             r, g, b = colorsys.hsv_to_rgb(r, g, b)
-
-        n = k.get('base', 1)
 
         self.r = float(r) / n
         self.g = float(g) / n
@@ -499,6 +507,10 @@ class Color(object):
     @property
     def hsba(self):
         return colorsys.rgb_to_hsv(self.r, self.g, self.b) + (self.a,)
+
+    @property
+    def hex(self):
+        return '#%02x%02x%02x' % tuple(int(255 * v) for v in (self.r, self.g, self.b))
 
     def rotate(self, angle=180):
         """ Returns the color rotated on the RYB color wheel.
