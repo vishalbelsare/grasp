@@ -383,12 +383,10 @@ def steps(v1, v2):
         return 2
 
 def floats(s):
-    """ Returns a list of float from str.
+    """ Returns an iterator of floats from the string.
     """
-    a = re.findall(r'\d+\.?\d*|\.\d+', s) # '.5'
-    a = map(float, a)
-    a = list(a)
-    return a
+    for v in re.findall(r'\d+\.?\d*|\.\d+', s): # '.5'
+        yield float(v)
 
 #---- STATISTICS ----------------------------------------------------------------------------------
 
@@ -510,7 +508,7 @@ class Color(object):
 
     @property
     def hex(self):
-        return '#%02x%02x%02x' % tuple(int(255 * v) for v in (self.r, self.g, self.b))
+        return '#%02x%02x%02x' % tuple(int(255 * v) for v in self.rgb)
 
     def rotate(self, angle=180):
         """ Returns the color rotated on the RYB color wheel.
