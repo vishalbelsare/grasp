@@ -5808,7 +5808,7 @@ class FormData(dict):
 
     def __init__(self, s):
         self.update(re.findall(
-            r'\r\nContent-Disposition: form-data; name="(.*?)"\r\n\r\n(.*?)\r\n', u(s)))
+            r'\r\nContent-Disposition: form-data; name="(.*?)".*?\r\n\r\n(.*?)\r\n', u(s), re.S))
 
 def generic(code, traceback=''):
     return '<h1>%s %s</h1><pre>%s</pre>' % (code, STATUS[code], traceback)
