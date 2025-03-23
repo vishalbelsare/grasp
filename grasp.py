@@ -727,14 +727,19 @@ class CSV(table):
         if rows:
             self.extend(rows)
 
-    def save(self, name=''):
+    def serialize(self):
+        """ Returns a comma-separated string.
+        """
         a = []
         for r in self:
             r = ('"%s"' % u(s).replace('"', '""') for s in r)
             r = self.separator.join(r)
             a.append(r)
+        return u'\n'.join(a)
+
+    def save(self, name=''):
         f = io.open(name or self.name, 'w', encoding='utf-8')
-        f.write(u'\n'.join(a))
+        f.write(self.serialize())
         f.close()
 
     def clear(self):
@@ -5807,8 +5812,13 @@ class HTTPError(Exception):
 class FormData(dict):
 
     def __init__(self, s):
-        self.update(re.findall(
-            r'\r\nContent-Disposition: form-data; name="(.*?)".*?\r\n\r\n(.*?)\r\n', u(s), re.S))
+        for k, v in re.findall(r'Content-Disposition: form-data; (.*?)\r\n\r\n(.*?)\r\n', u(s), re.S):
+            try:
+                v = re.search(r'.name="(.*?)"', k).group(1), v # (filename, bytes)
+                k = re.search(r'^name="(.*?)"', k).group(1)
+            except:
+                k = re.search(r'^name="(.*?)"', k).group(1)
+            self[k] = v
 
 def generic(code, traceback=''):
     return '<h1>%s %s</h1><pre>%s</pre>' % (code, STATUS[code], traceback)
