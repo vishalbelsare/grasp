@@ -235,7 +235,7 @@ assert list(map(u, e1('div div p'             ))) == [u'<p>1</p>', u'<p>2</p>']
 assert list(map(u, e1('div p:first-child'     ))) == [u'<p>1</p>']
 assert list(map(u, e1('div p:nth-child(1)'    ))) == [u'<p>1</p>']
 assert list(map(u, e1('div p:nth-child(2)'    ))) == [u'<p>2</p>']
-assert list(map(u, e1('p:not(":first-child")' ))) == [u'<p>2</p>']
+assert list(map(u, e1('p:not(:first-child)'   ))) == [u'<p>2</p>']
 assert list(map(u, e1('div p:contains("2")'   ))) == [u'<p>2</p>']
 assert list(map(u, e1('p + p'                 ))) == [u'<p>2</p>']
 assert list(map(u, e1('p ~ p'                 ))) == [u'<p>2</p>']
@@ -277,7 +277,6 @@ assert when('day one'                           ) == [u'day one']
 assert when('the day after tomorrow'            ) == [u'the day after tomorrow']
 assert when('the first day of March'            ) == [u'the first day of March']
 
-
 #---- NET -----------------------------------------------------------------------------------------
 
 g = Graph(
@@ -296,7 +295,15 @@ assert               sp(g             , 2, 4)     == (2, 3, 4)
 assert top( betweenness(g                   ))[0] == 3
 assert top(    pagerank(g                   ))[0] == 4
 
-#--------------------------------------------------------------------------------------------------
+#---- NET -----------------------------------------------------------------------------------------
+
+b = b'multipart/form-data; boundary=x\r\n' + \
+    b'--x\r\nContent-Disposition: form-data; name="k"\r\n\r\nv\r\n' + \
+    b'--x--j'
+
+assert FormData(b)['k'] == 'v'
+
+#---- ML ------------------------------------------------------------------------------------------
 
 a = [
     [0, 0, 0, 0, 14],
@@ -315,7 +322,7 @@ assert round(agreement(a), 2) == 0.38
 
 assert round(mcc({1: {1: 6, 0: 1}, 0: {1: 2, 0: 3}}), 2) == 0.48
 
-#--------------------------------------------------------------------------------------------------
+#---- ML ------------------------------------------------------------------------------------------
 
 try:
     loc = {r[0]: r for r in csv(next(ls('en-loc.csv')))}
