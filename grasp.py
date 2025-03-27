@@ -2,7 +2,7 @@
 
 ##### GRASP.PY ####################################################################################
 
-__version__   = '3.2.5'
+__version__   = '3.3.0'
 __license__   = 'BSD'
 __email__     = 'info@textgain.com'
 __author__    = 'Textgain'
@@ -4629,7 +4629,7 @@ bluesky = Bluesky()
 
 keys['Twitter'] = ''
 
-class Twitter(object):
+class Twitter(object): # (deprecated)
 
     def search(self, q, language='', delay=4, cached=False, key=None, **kwargs):
         """ Returns an iterator of posts.
@@ -5708,12 +5708,6 @@ def when(s, language='en'):
 #---- APP -----------------------------------------------------------------------------------------
 # The App class can be used to create a web service or GUI, served in a browser using JSON or HTML.
 
-SECOND, MINUTE, HOUR, DAY = 1, 1*60, 1*60*60, 1*60*60*24
-
-STATUS = BaseHTTPServer.BaseHTTPRequestHandler.responses
-STATUS = {int(k): v[0] for k, v in STATUS.items()}
-STATUS[429] = 'Too Many Requests'
-
 headers = {
     'Content-Type': 
         'text/html; charset=utf-8',
@@ -5725,26 +5719,41 @@ headers = {
         '*',
 }
 
-# Recycle threads for handling concurrent requests:
-class ThreadPoolMixIn(SocketServer.ThreadingMixIn):
+status = {
+    429: 'Too Many Requests',
+}
 
-    def __init__(self, threads=10):
-        self.pool = multiprocessing.pool.ThreadPool(threads)
+for k, v in BaseHTTPServer.BaseHTTPRequestHandler.responses.items():
+    status[int(k)] = v[0]
 
-    def process_request(self, *args):
-        self.pool.apply_async(self.process_request_thread, args)
+class HTTPRequest(threading.local):
 
-    def process_request_thread(self, *args):
-        try:
-            SocketServer.ThreadingMixIn.process_request_thread(self, *args)
-        except socket.timeout:
-            pass
-        except socket.error:
-            pass
+    def __init__(self):
+        self.app     = None
+        self.ip      = None
+        self.method  = 'GET'
+        self.path    = '/'
+        self.query   = {}
+        self.headers = {}
 
-    def handle_error(self, *args):
-      # traceback.print_exc()
-        pass
+class HTTPResponse(threading.local):
+
+    def __init__(self):
+        self.code    = 200
+        self.headers = {}
+
+class HTTPError(Exception):
+
+    def __init__(self, code=404):
+        self.code = code
+
+def generic(code, traceback=''):
+    return '<h1>%s %s</h1><pre>%s</pre>' % (code, status[code], traceback)
+
+# print(generic(404))
+
+#---- APP ROUTER ----------------------------------------------------------------------------------
+# The App.router binds REST requests to Python callback functions (@app.route) or static content.
 
 class RouteError(Exception):
     pass
@@ -5788,43 +5797,31 @@ class Router(dict):
 
         raise RouteError
 
-class HTTPRequest(threading.local):
+#---- APP SERVER ----------------------------------------------------------------------------------
+# The App server is thread-safe with rate limiting and session data and can be deployed with Nginx.
 
-    def __init__(self):
-        self.app     = None
-        self.ip      = None
-        self.method  = 'GET'
-        self.path    = '/'
-        self.query   = {}
-        self.headers = {}
+SECOND, MINUTE, HOUR, DAY = 1, 1*60, 1*60*60, 1*60*60*24
 
-class HTTPResponse(threading.local):
+# Recycle threads for handling concurrent requests:
+class ThreadPoolMixIn(SocketServer.ThreadingMixIn):
 
-    def __init__(self):
-        self.code    = 200
-        self.headers = {}
+    def __init__(self, threads=10):
+        self.pool = multiprocessing.pool.ThreadPool(threads)
 
-class HTTPError(Exception):
+    def process_request(self, *args):
+        self.pool.apply_async(self.process_request_thread, args)
 
-    def __init__(self, code=404):
-        self.code = code
+    def process_request_thread(self, *args):
+        try:
+            SocketServer.ThreadingMixIn.process_request_thread(self, *args)
+        except socket.timeout:
+            pass
+        except socket.error:
+            pass
 
-class FormData(dict):
-
-    def __init__(self, s):
-        for k, v in re.findall(r'Content-Disposition: form-data; (.*?)\r\n\r\n(.*?)\r\n', u(s), re.S):
-            try:
-                v = re.search(r'.name="(.*?)"', k).group(1), v # (filename, bytes)
-                k = re.search(r'^name="(.*?)"', k).group(1)
-            except:
-                k = re.search(r'^name="(.*?)"', k).group(1)
-            self[k] = v
-
-def generic(code, traceback=''):
-    return '<h1>%s %s</h1><pre>%s</pre>' % (code, STATUS[code], traceback)
-
-def mimetype(url):
-    return mimetypes.guess_type(url)[0] or 'application/octet-stream'
+    def handle_error(self, *args):
+      # traceback.print_exc()
+        pass
 
 WSGIServer, WSGIRequestHandler = (
     wsgiref.simple_server.WSGIServer,
@@ -5932,7 +5929,7 @@ class App(ThreadPoolMixIn, WSGIServer):
                 q2 = q2.read(int(h2 or 0))
             if h1.startswith('multipart') is True:
                 q2 = q2.read(int(h2 or 0))
-                q2 = FormData(q2)
+                q2 = FormData(b(h1 + '\r\n') + q2)
             if h1.startswith('application/json'):
                 q2 = json.loads(q2 or '{}')
             if hasattr(q2, 'keys'):
@@ -6000,7 +5997,7 @@ class App(ThreadPoolMixIn, WSGIServer):
             v = ''
 
         # https://www.python.org/dev/peps/pep-0333/#the-start-response-callable
-        start_response('%s %s' % (r.code, STATUS[r.code]), list(r.headers.items()))
+        start_response('%s %s' % (r.code, status[r.code]), list(r.headers.items()))
         return [b(v)]
 
 # app = application = App(threads=10)
@@ -6025,33 +6022,8 @@ class App(ThreadPoolMixIn, WSGIServer):
 
 # app.run()
 
-#---- APP RELOAD ----------------------------------------------------------------------------------
-
-def autoreload(app):
-    """ Restarts the script running the app when modified.
-    """
-    f = [ inspect.getouterframes(
-          inspect.currentframe())[2][1], date() ] # caller
-
-    @scheduled(1)
-    def _():
-        try:
-            t = modified(f[0])
-            if t < f[1]:
-                return
-            if sys.platform.startswith('win'):
-                return
-            f[1] = t
-            app.shutdown()
-            app.server_close() 
-            os.execl(
-                sys.executable,
-                sys.executable,
-               *sys.argv)
-        except:
-            pass
-
 #---- APP SESSION ---------------------------------------------------------------------------------
+# The App.session dict has user-specific data, using a session cookie, as long as App(session=HOUR).
 
 class Cookie(dict):
 
@@ -6060,19 +6032,20 @@ class Cookie(dict):
         """
         def parse(s):
             for s in s.split(';'):
-                s = s.split('=') 
-                s = s + ['']
+                s = s + '='
+                s = s.split('=')
                 k = s[0].strip()
                 v = s[1].strip()
                 if k:
                     yield k, v
-        if isinstance(s, basestring):
-            s = parse(s)
-        self.update(s)
+
+        self.update(parse(s) if isinstance(s, basestring) else s)
         self.update(kwargs)
 
     def __str__(self):
         return ';'.join('%s=%s' % (k, v) if v != '' else k for k, v in self.items())
+
+# print(dict(Cookie('session=0073cb2;')))
 
 class HTTPState(dict):
 
@@ -6123,8 +6096,7 @@ def _lazy_state(r):
     try:
         v = r._state
     except:
-        v = r._state = r.app.state() \
-                    if r.app else {}
+        v = r._state = r.app.state() if r.app else {}
     return v
 
 HTTPRequest.session = \
@@ -6144,7 +6116,37 @@ App.session = \
 # 
 # app.run()
 
-#---- APP DATA ------------------------------------------------------------------------------------
+#---- APP REQUEST ---------------------------------------------------------------------------------
+# The App.request handles basic POST multipart/form-data, passing it to the callback(**query) dict.
+
+class FormData(dict): # RFC 7578
+
+    def __init__(self, s=''):
+        """ Returns the multipart string as a dict.
+        """
+        if s:
+            s = u(s) 
+            s = s + '\r'
+            for m in re.split(r'\r\n--' + re.search(r'boundary="?(.*?)"?\r', s).group(1), s)[1:-1]:
+                m = m.split('\r\n\r\n', 1)
+                try:
+                    k = m[0]
+                    v = m[1]
+                    m = re.findall(r'name="(.*?)"', k)
+                    k = m[0]
+                    v = m[1], b(v) # (filename, bytes)
+                except:
+                    v = u(v)
+                finally:
+                    self[k] = v
+
+#---- APP RESPONSE --------------------------------------------------------------------------------
+# The App.response handles basic str & dict (JSON) output with customizable headers for other data.
+
+def mimetype(path, default='application/octet-stream'):
+    """ Returns the media type of the given filename.
+    """
+    return mimetypes.guess_type(path)[0] or default
 
 def dataurl(path):
     """ Returns a data URL from the given file path.
@@ -6156,6 +6158,33 @@ def dataurl(path):
     v = v.decode('utf-8')
     v = 'data:%s;base64,%s' % (k, v)
     return v
+
+#---- APP RELOAD ----------------------------------------------------------------------------------
+# The App(debug=True) setting will automatically reload the server if the parent script changes.
+
+def autoreload(app):
+    """ Restarts the script running the app when modified.
+    """
+    f = [ inspect.getouterframes(
+          inspect.currentframe())[2][1], date() ] # caller
+
+    @scheduled(1)
+    def _():
+        try:
+            t = modified(f[0])
+            if t < f[1]:
+                return
+            if sys.platform.startswith('win'):
+                return
+            f[1] = t
+            app.shutdown()
+            app.server_close() 
+            os.execl(
+                sys.executable,
+                sys.executable,
+               *sys.argv)
+        except:
+            pass
 
 ##### NET #########################################################################################
 
