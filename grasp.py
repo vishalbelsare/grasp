@@ -5708,7 +5708,7 @@ def when(s, language='en'):
 #---- APP -----------------------------------------------------------------------------------------
 # The App class can be used to create a web service or GUI, served in a browser using JSON or HTML.
 
-headers = {
+headers = { # (default)
     'Content-Type': 
         'text/html; charset=utf-8',
     'X-Frame-Options': 
@@ -5753,7 +5753,7 @@ def generic(code, traceback=''):
 # print(generic(404))
 
 #---- APP ROUTER ----------------------------------------------------------------------------------
-# The App.router binds REST requests to Python callback functions (@app.route) or static content.
+# The App.router binds REST requests to Python callback functions (@app.route), or to static pages.
 
 class RouteError(Exception):
     pass
@@ -5761,7 +5761,7 @@ class RouteError(Exception):
 class Router(dict):
 
     def __init__(self, static=None):
-        self.static = static
+        self.static = static # path
 
     def __setitem__(self, path, f):
         """ Defines the handler function for the given path.
@@ -6023,7 +6023,7 @@ class App(ThreadPoolMixIn, WSGIServer):
 # app.run()
 
 #---- APP SESSION ---------------------------------------------------------------------------------
-# The App.session dict has user-specific data, using a session cookie, as long as App(session=HOUR).
+# The App.session dict has user-specific data, using a cookie that expires every App(session=HOUR).
 
 class Cookie(dict):
 
@@ -6045,7 +6045,7 @@ class Cookie(dict):
     def __str__(self):
         return ';'.join('%s=%s' % (k, v) if v != '' else k for k, v in self.items())
 
-# print(dict(Cookie('session=0073cb2;')))
+# print(dict(Cookie('session=998f535c6a;')))
 
 class HTTPState(dict):
 
