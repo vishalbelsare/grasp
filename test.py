@@ -297,11 +297,16 @@ assert top(    pagerank(g                   ))[0] == 4
 
 #---- NET -----------------------------------------------------------------------------------------
 
-b = b'multipart/form-data; boundary=x\r\n' + \
-    b'--x\r\nContent-Disposition: form-data; name="k"\r\n\r\nv\r\n' + \
-    b'--x--j'
+b1 = b'multipart/form-data; boundary=x\r\n' + \
+     b'--x\r\nContent-Disposition: form-data; name="k"\r\n\r\nv\r\n' + \
+     b'--x--j'
 
-assert FormData(b)['k'] == 'v'
+b2 = b'multipart/form-data; boundary=x\r\n' + \
+     b'--x\r\nContent-Disposition: form-data; name="k" filename="f"\r\n\r\nv\r\n' + \
+     b'--x--j'
+
+assert FormData(b1)['k'] == (     u'v')
+assert FormData(b2)['k'] == ('f', b'v')
 
 #---- ML ------------------------------------------------------------------------------------------
 
