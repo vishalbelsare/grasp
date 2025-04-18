@@ -2,7 +2,7 @@
 
 ##### GRASP.PY ####################################################################################
 
-__version__   = '3.3.0'
+__version__   = '3.3.1'
 __license__   = 'BSD'
 __email__     = 'info@textgain.com'
 __author__    = 'Textgain'
@@ -63,6 +63,7 @@ import subprocess
 import multiprocessing
 import multiprocessing.pool
 import queue
+import functools
 import itertools
 import collections
 import unicodedata
@@ -478,6 +479,11 @@ def b(v, encoding='utf-8'):
 
 #---- ITERATION -----------------------------------------------------------------------------------
 
+def prod(a):
+    """ Returns the product of values.
+    """
+    return functools.reduce(lambda x, y: x * y, a, 1)
+
 def first(n, a):
     """ Returns a iterator of values from index 0 to n.
     """
@@ -646,6 +652,26 @@ def unzip(f):
     f = zipfile.ZipFile(f)
     f = f.open(f.namelist()[0])
     return f
+
+#---- BUFFER --------------------------------------------------------------------------------------
+# Clipboard copy & paste is useful when temporary files can not be passed between applications.
+
+def clipboard(s=None):
+    """ Returns the string copied to the clipboard.
+    """
+    if OS == 'Linux':
+        x = ('xclip', 'xclip -o')
+    if OS == 'Darwin':
+        x = ('pbcopy', 'pbpaste')
+    if OS == 'Windows':
+        x = ('set-clipboard', 'get-clipboard')
+    if s is not None:
+        subprocess.run(x[0], input=b(s))
+    s = subprocess.run(x[1], capture_output=True).stdout
+    s = u(s)
+    return s
+
+# print(clipboard())
 
 ##### DB ##########################################################################################
 
@@ -1520,6 +1546,7 @@ def vectorize(s, features=('ch3',)): # (vector)
     for f in features:
         f = f.lower()
         n = f[-1]
+        n = n if n.isdigit() else 0
         n = int(n)
         if f[0] == '^': # '^1'
             v[f + s[:+n]] = 1
@@ -2877,6 +2904,9 @@ class trie(dict):
     def __init__(self, lexicon={}):
         """ Returns a trie for the dict of str keys.
         """
+        self.update(lexicon)
+
+    def update(self, lexicon={}):
         for k, v in lexicon.items():
             n = self
             for k in k:
