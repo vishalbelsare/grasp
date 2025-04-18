@@ -6,6 +6,7 @@ from grasp import *
 
 a = [1, 2, 3, 4, 4]
 
+assert           prod(iter(a)                   ) == 96
 assert list( first(2, iter(a)                  )) == [1, 2]
 assert list(   sliced(iter(a)            , 0, 2)) == [1, 2]
 assert list(   sliced(iter(a)         , 0, 3, 2)) == [1, 3]
