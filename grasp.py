@@ -2,7 +2,7 @@
 
 ##### GRASP.PY ####################################################################################
 
-__version__   = '3.3.1'
+__version__   = '3.3.2'
 __license__   = 'BSD'
 __email__     = 'info@textgain.com'
 __author__    = 'Textgain'
@@ -5517,17 +5517,19 @@ md = markdown
 #---- DATE ----------------------------------------------------------------------------------------
 # The date() function attempts to parse a Date object from a string or timestamp (int/float).
 
-DATE = (
-#    http://strftime.org           # DATE                            USED BY:
-    '%a %b %d %H:%M:%S +0000 %Y' , # Mon Jan 31 10:00:00 +0000 2000  Twitter
-    '%Y-%m-%dT%H:%M:%S+0000'     , # 2000-01-31T10:00:00+0000        Facebook
-    '%Y-%m-%dT%H:%M:%SZ'         , # 2000-01-31T10:00:00Z            Bing
-    '%Y-%m-%d %H:%M:%S'          , # 2000-01-31 10:00:00
-    '%Y-%m-%d %H:%M'             , # 2000-01-31 10:00
-    '%Y-%m-%d'                   , # 2000-01-31
+DATE = (                           # http://strftime.org
+    '%Y-%m-%d'                   , # 2000-12-31
+    '%Y-%m-%d %H:%M'             , # 2000-12-31 23:59
+    '%Y-%m-%d %H:%M:%S'          , # 2000-12-31 23:59:00
+    '%Y-%m-%dT%H:%M:%SZ'         , # 2000-12-31T23:59:00Z
+    '%Y-%m-%d %H:%M:%S%z'        , # 2000-12-31 23:59:00+0000
+    '%Y-%m-%dT%H:%M:%S+0000'     , # 2000-12-31T23:59:00+0000
+    '%Y-%m-%d %H:%M:%S %z'       , # 2000-12-31 23:59:00 +0000
+    '%Y-%m-%dT%H:%M:%S.%f%z'     , # 2000-12-31T23:59:00.000+0000
+    '%Y-%m-%d %H:%M:%S %Z'       , # 2000-12-31 23:59:00 GMT
 )
 
-def rfc_2822(s):                   # Mon, 31 Jan 2000 10:00:00 GMT   RSS
+def rfc_2822(s):                   # Mon, 31 Jan 2000 23:59:00 GMT
     return email.utils.mktime_tz(
            email.utils.parsedate_tz(s))
 
@@ -5543,6 +5545,10 @@ class Date(datetime.datetime):
     # Date.hour
     # Date.minute
     # Date.second
+
+    @property
+    def tz(self):
+        return self.tzinfo.utcoffset(None).seconds if self.tzinfo else 0 # seconds
 
     @property
     def week(self):
@@ -5583,6 +5589,7 @@ class Date(datetime.datetime):
     def __repr__(self):
         return "Date(%s)" % repr(self.__str__())
 
+@static(f='%Y-%m-%d') # last seen
 def date(*v, **format):
     """ Returns a Date from the given timestamp or date string.
     """
@@ -5608,13 +5615,15 @@ def date(*v, **format):
         return Date.now()
     try:
         return Date.fromtimestamp(rfc_2822(v)) 
-    except: 
+    except:
         pass
-    for f in (format,) + DATE:
+    for f in (format, date.f) + DATE:
         try:
             return Date.strptime(v, f)
         except:
             pass
+        finally:
+            date.f = f
     raise DateError('unknown date format: %s' % repr(v))
 
 def datediff(d1, d2):
@@ -5635,6 +5644,11 @@ def tz(d):
         return date(d.replace(tzinfo=datetime.timezone.utc))
     else:
         return date(d)
+
+def utc(d):
+    """ Returns a Date with tzinfo (timezone-aware) set to +00.
+    """
+    return d + d.tz 
 
 def timeline(a, n=10, date=lambda v: v, since=None, until=None):
     """ Returns an ordered dict of n lists distributed by date.
