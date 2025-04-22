@@ -260,6 +260,7 @@ assert u(date(2000, 12, 31                     )) == u'2000-12-31 00:00:00'
 assert u(date(2000, 12, 31) - 60 * 60 * 24      ) == u'2000-12-30 00:00:00'
 assert   date(2000, 12, 31) .format('%Y-%m-%d'  ) == u'2000-12-31'
 assert u(date('Dec 31 2000', format='%b %d %Y' )) == u'2000-12-31 00:00:00'
+assert u(date('2000-12-31' , format='%b %d %Y' )) == u'2000-12-31 00:00:00'
 
 assert when('Mon Dec 31 2000'                   ) == [u'Mon Dec 31 2000']
 assert when('Monday December 31, 2000.'         ) == [u'Monday December 31', u'2000']
