@@ -4980,10 +4980,10 @@ class Node(object):
 
     def __init__(self):
         self.parent = None
-        self.children = []
+        self.nodes  = []
 
     def __iter__(self):
-        return iter(self.children)
+        return iter(self.nodes)
 
 @printable
 class Text(Node):
@@ -5030,33 +5030,44 @@ class Element(Node):
 
     @property
     def html(self):
-        return ''.join(u(n) for n in self)
+        return ''.join(u(n) for n in self.nodes)
 
     @property
-    def successors(self):
-        if self.parent:
-            for n in self.parent.children[self.parent.children.index(self) + 1:]:
-                if isinstance(n, Element):
-                    yield n
+    def children(self):
+        return [n for n in self.nodes if isinstance(n, Element)]
 
     @property
-    def predecessors(self):
+    def index(self):
+        return self.parent.children.index(self) if self.parent else -1
+
+    @property
+    def following(self):
         if self.parent:
-            for n in self.parent.children[:self.parent.children.index(self)]:
-                if isinstance(n, Element):
-                    yield n
+            for e in self.parent.children[self.index + 1:]:
+                yield e
+
+    @property
+    def preceding(self):
+        if self.parent:
+            for e in self.parent.children[:self.index][::-1]:
+                yield e
 
     @property
     def next(self):
         """ Yields the next sibling in Element.parent.children.
         """
-        return next(self.successors, None)
+        return next(self.following, None)
 
     @property
     def previous(self):
         """ Yields the previous sibling in Element.parent.children.
         """
-        return next(self.predecessors, None)
+        return next(self.preceding, None)
+
+    def siblings(self, tag='*', attributes={}):
+        """ Returns a list of siblings with the given tag and attributes.
+        """
+        return [e for e in (self.parent or Element()).children if e.match(tag, attributes)]
 
     def match(self, tag='*', attributes={}):
         """ Returns True if the element has the given tag and attributes.
@@ -5073,16 +5084,15 @@ class Element(Node):
                 return False
         return True
 
-    def find(self, tag='*', attributes={}, depth=10*10):
+    def find(self, tag='*', attributes={}, depth=10**10):
         """ Returns an iterator of nested elements with the given tag and attributes.
         """
         if depth > 0:
-            for n in self:
-                if isinstance(n, Element):
-                    if n.match(tag, attributes):
-                        yield n
-                    for n in n.find(tag, attributes, depth-1):
-                        yield n
+            for e in self.children:
+                if e.match(tag, attributes):
+                    yield e
+                for e in e.find(tag, attributes, depth-1):
+                    yield e
 
 @printable
 class Document(HTMLParser, Element):
@@ -5117,7 +5127,7 @@ class Document(HTMLParser, Element):
         try:
             n = Text(data)
             n.parent = self._stack[-1]
-            n.parent.children.append(n)
+            n.parent.nodes.append(n)
         except:
             pass
 
@@ -5125,7 +5135,7 @@ class Document(HTMLParser, Element):
         try:
             n = Element(tag, attributes)
             n.parent = self._stack[-1]
-            n.parent.children.append(n)
+            n.parent.nodes.append(n)
             # New elements will be nested inside,
             # unless it is self-closing (<br />).
             if tag not in SELF_CLOSING:
@@ -5174,7 +5184,15 @@ SELECTOR = re.compile(''.join((
     r'([+<>~])?',                                                 # combinator + < >
     r'(\w+|\*)?',                                                 # tag
     r'((?:[.#][-\w]+)|(?:\[.*?\]))?',                             # attributes # . [=]
-    r'(\:first-child|\:(?:nth-child|not|has|contains)\(.*?\))?',  # pseudo :
+    r'(%s)?' % '|'.join((                                         # pseudo :
+    r'\:first-child',
+    r'\:last-child',
+    r'\:nth-child\(.*?\)',
+    r'\:nth-of-type\(.*?\)',
+    r'\:not\(.*?\)',
+    r'\:has\(.*?\)',
+    r'\:contains\(.*?\)',
+    r'\:empty')),
     r'$'
 )))
 
@@ -5225,37 +5243,44 @@ def selector(element, s):
                     a = {k: re.compile(r'%s'   % v, re.I)}        # a[href*="textgain"]
 
             if combinator == '':
-                e = (e.find(tag, a) for e in e)
-                e = list(itertools.chain(*e))                     # div a
+                e = (e for e in e for e in e.find(tag, a))        # div a
+                e = list(unique(e))
             if combinator == '>':
-                e = (e.find(tag, a, 1) for e in e)
-                e = list(itertools.chain(*e))                     # div > a
+                e = (e for e in e for e in e.find(tag, a, 1))     # div > a
+                e = list(unique(e))
             if combinator == '<':
-                e = [e for e in e if any(e.find(tag, a, 1))]      # div < a
+                e = (e for e in e if any(  e.find(tag, a, 1)))    # div < a
+                e = list(unique(e))
             if combinator == '+':
-                e = map(lambda e: e.next, e)
-                e = [e for e in e if e and e.match(tag, a)]       # div + a
+                e = (e.next for e in e)
+                e = (e for e in e if e and e.match(tag, a))       # div + a
+                e = list(unique(e))
             if combinator == '~':
-                e = map(lambda e: e.successors, e)
-                e = (e for e in e for e in e if e.match(tag, a))
-                e = list(unique(e))                               # div ~ a
+                e = (e for e in e for e in e.following)
+                e = (e for e in e if e and e.match(tag, a))       # div ~ a
+                e = list(unique(e))
 
+            if pseudo.startswith(':empty'):
+                e = [e for e in unique(e) if not e.nodes]         # div a:empty
             if pseudo.startswith(':first-child'):
-                e = (e for e in e if not e.previous)
-                e = list(unique(e))                               # div a:first-child
+                e = [e for e in unique(e) if not e.previous]      # div a:first-child
+            if pseudo.startswith(':last-child'):
+                e = [e for e in unique(e) if not e.next]          # div a:last-child
             if pseudo.startswith(':nth-child'):
-                s = pseudo[11:-1]
-                e = [e[int(s) - 1]]                               # div a:nth-child(2)
+                i = int(pseudo[11:-1]) - 1
+                e = [e for e in unique(e) if e.index == i]        # div a:nth-child(2)
+            if pseudo.startswith(':nth-of-type'):
+                i = int(pseudo[13:-1]) - 1
+                e = [e for e in unique(e) if e.siblings(e.tag).index(e) == i]
             if pseudo.startswith(':not'):
-                s = pseudo[5:-1]
-                e = [e for e in e if e not in element(s)]         # div:not(.main)
+                s = str(pseudo[5:-1])
+                e = [e for e in unique(e) if e not in element(s)] # div:not(.main)
             if pseudo.startswith(':has'):
-                s = pseudo[5:-1]
-                e = [e for e in e if e(s)]                        # div:has(.main)
+                s = str(pseudo[5:-1])
+                e = [e for e in unique(e) if e(s)]                # div:has(.main)
             if pseudo.startswith(':contains'):
-                s = pseudo[11:-2]
-                e = (e for e in e if s in e.html.lower())
-                e = list(unique(e))                               # div:contains("hello")
+                s = str(pseudo[11:-2])
+                e = [e for e in unique(e) if s in e.html.lower()] # div:contains("hello")
 
         m.extend(e)
     return m
