@@ -2,7 +2,7 @@
 
 ##### GRASP.PY ####################################################################################
 
-__version__   = '3.3.2'
+__version__   = '3.3.3'
 __license__   = 'BSD'
 __email__     = 'info@textgain.com'
 __author__    = 'Textgain'
@@ -4801,7 +4801,7 @@ keys['GPT'] = ''
 class Q(unicode): pass
 class A(unicode): pass
 
-def gpt(q, d=1, delay=1, cached=False, timeout=30, key=None):
+def gpt(q, d=1, delay=1, cached=False, timeout=30, key=None, model='gpt-4.1-mini'):
     """ Returns ChatGPT's response as a string.
     """
     if not isinstance(q, list): # [Q, A, ...] conversation
@@ -4815,7 +4815,7 @@ def gpt(q, d=1, delay=1, cached=False, timeout=30, key=None):
     r  = 'https://api.openai.com/v1/chat/completions', {
          'messages'      : q,
          'temperature'   : d,
-         'model'         : 'gpt-4o-mini',
+         'model'         : model,
     }, { 'Content-Type'  : 'application/json',
          'Authorization' : 'Bearer %s' % (key or keys['GPT'])
     }
@@ -4833,6 +4833,8 @@ def gpt(q, d=1, delay=1, cached=False, timeout=30, key=None):
 # q = 'Write like a child. What is Earth?'
 
 # q = 'Write like a lawful evil dragon. Joke about capturing an adventurer.'
+
+# print('tokens: %i' % (len(q) * 0.275))
 
 # print(gpt(q))
 
@@ -4949,7 +4951,7 @@ def mail(to, subject, message, relay=SMTP('', '', 'smtp.gmail.com:465')):
 #     ])
 # ])
 
-SELF_CLOSING = { # <img src="" />
+VOID = { # <img src="" />
     'area'    ,
     'base'    ,
     'br'      ,
@@ -4968,13 +4970,10 @@ SELF_CLOSING = { # <img src="" />
     'wbr'     ,
 }
 
-def quote(s):
-    """ Returns the quoted string.
+def encode_attr(k, v=''):
+    """ Returns the encoded HTML attribute name & value.
     """
-    if '"' in s:
-        return "'%s'" % s
-    else:
-        return '"%s"' % s
+    return '%s="%s"' % (k, encode(u(v), newlines=True)) 
 
 class Node(object):
 
@@ -5019,14 +5018,18 @@ class Element(Node):
         return 'Element(tag=%s)' % repr(self.tag)
 
     def __str__(self):
-        a = ' '.join('%s=%s' % (k, quote(v)) for k, v in self.attributes.items() if v is not None)
+        a = ' '.join(encode_attr(k, v) for k, v in self.attributes.items() if v is not None)
         a = ' ' + a if a else ''
-        if self.tag in SELF_CLOSING:
+        if self.tag in VOID:
             return u'<%s%s />' % (
                 self.tag, a)
         else:
             return u'<%s%s>%s</%s>' % (
                 self.tag, a, self.html, self.tag)
+
+    @property
+    def text(self):
+        return ''.join(u(n) if isinstance(n, Text) else n.text for n in self.nodes)
 
     @property
     def html(self):
@@ -5067,7 +5070,7 @@ class Element(Node):
     def siblings(self, tag='*', attributes={}):
         """ Returns a list of siblings with the given tag and attributes.
         """
-        return [e for e in (self.parent or Element()).children if e.match(tag, attributes)]
+        return [e for e in (self.parent and self.parent.children or ()) if e.match(tag, attributes)]
 
     def match(self, tag='*', attributes={}):
         """ Returns True if the element has the given tag and attributes.
@@ -5133,19 +5136,21 @@ class Document(HTMLParser, Element):
 
     def handle_starttag(self, tag, attributes):
         try:
-            n = Element(tag, attributes)
+            # Boolean attribute is '' (not None):
+            a = ((k, v or '') for k, v in attributes)
+            n = Element(tag, a)
             n.parent = self._stack[-1]
             n.parent.nodes.append(n)
             # New elements will be nested inside,
             # unless it is self-closing (<br />).
-            if tag not in SELF_CLOSING:
+            if tag not in VOID:
                 self._stack.append(n)
         except:
             pass
 
     def handle_endtag(self, tag):
         try:
-            if tag not in SELF_CLOSING:
+            if tag not in VOID:
                 n = self._stack.pop()
             if n.tag == 'head':
                 self.head = n
@@ -5280,7 +5285,7 @@ def selector(element, s):
                 e = [e for e in unique(e) if e(s)]                # div:has(.main)
             if pseudo.startswith(':contains'):
                 s = str(pseudo[11:-2])
-                e = [e for e in unique(e) if s in e.html.lower()] # div:contains("hello")
+                e = [e for e in unique(e) if s in e.text.lower()] # div:contains("hello")
 
         m.extend(e)
     return m
@@ -5309,6 +5314,7 @@ BLOCK = {
     'header'     , 
     'hr'         ,
     'main'       ,
+    'nav'        ,
     'ol'         ,
     'p'          ,
     'pre'        ,
@@ -5317,6 +5323,7 @@ BLOCK = {
     'table'      ,
     'textarea'   ,
     'ul'         ,
+    'video'      ,
 }
 
 PLAIN = {
@@ -5353,7 +5360,7 @@ def plaintext(element, keep={}, ignore={'head', 'script', 'style', 'form'}, form
                 if n.tag in BLOCK:
                     ch = ch.strip()
                 if n.tag in keep:
-                    a  = ' '.join('%s=%s' % (k, quote(n[k])) for k in keep[n.tag] if n[k] != None)
+                    a  = ' '.join(encode_attr(k, n[k]) for k in keep[n.tag] if n[k] is not None)
                     a  = ' ' + a if a else ''
                     ch = '<%s%s>%s</%s>' % (n.tag, a, ch, n.tag)
                 else:
@@ -5379,7 +5386,7 @@ plain = plaintext
 # 
 # print(txt)
 
-def encode(s):
+def encode(s, newlines=False):
     """ Returns a string with encoded entities.
     """
     s = s.replace('&' , '&amp;'  )
@@ -5387,22 +5394,24 @@ def encode(s):
     s = s.replace("'" , '&apos;' )
     s = s.replace('<' , '&lt;'   )
     s = s.replace('>' , '&gt;'   )
-  # s = s.replace('\n', '&#10;'  )
-  # s = s.replace('\r', '&#13;'  )
+    s = s.replace('\n', '&#10;'  ) if newlines else s
+    s = s.replace('\r', '&#13;'  ) if newlines else s
     return s
 
 def decode(s):
     """ Returns a string with decoded entities.
     """
+  # s = unescape(s)
     s = s.replace('&nbsp;' , ' ' )
     s = s.replace('&quot;' , '"' )
     s = s.replace('&apos;' , "'" )
-    s = s.replace('&#39;'  , "'" )
     s = s.replace('&lt;'   , '<' )
     s = s.replace('&gt;'   , '>' )
+    s = s.replace('&#34;'  , '"' )
+    s = s.replace('&#39;'  , "'" )
+    s = s.replace('&#10;'  , '\n')
+    s = s.replace('&#13;'  , '\r')
     s = s.replace('&amp;'  , '&' )
-  # s = s.replace('&#10;'  , '\n')
-  # s = s.replace('&#13;'  , '\r')
     s = re.sub(r'https?://.*?(?=\s|$)', \
         lambda m: urllib.parse.unquote(m.group()), s) # '%3A' => ':' (in URL)
     return s
@@ -6118,11 +6127,13 @@ class Cookie(dict):
 
 class HTTPState(dict):
 
-    def __init__(self, app, expires=HOUR):
+    def __init__(self, app, expires=HOUR, secure=True, strict=True):
         """ HTTP state management, through cookies.
         """
         self.app     = app
         self.expires = expires
+        self.secure  = secure
+        self.strict  = strict
         self.checked = 0
 
     def __call__(self):
@@ -6144,11 +6155,11 @@ class HTTPState(dict):
         self[k] = v = t, self.get(k, [{}])[-1]
 
         # Update session cookie:
-        self.app.response.headers['Set-Cookie'] = ''.join((
-            'session=%s;' % k,
-            'Max-Age=%s;' % self.expires,
-            'SameSite=Strict;',
-            'Secure;'
+        self.app.response.headers['Set-Cookie'] = ' '.join((
+            'session=%s;'  % k,
+            'Max-Age=%s;'  % self.expires,
+            'SameSite=%s;' % self.strict and 'Strict' or 'Lax',
+            'Secure;'     if self.secure else '' # https://
         ))
         return v[1]
 

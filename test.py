@@ -222,7 +222,7 @@ assert subs([0, 3, 'cats', 1], [0, 2, 'cat', 1 ]) == True
 
 #---- WWW -----------------------------------------------------------------------------------------
 
-e1 = DOM('<div id="main"><div class="story"><p>1</p><p>2</p></div</div>')
+e1 = DOM('<div id="main"><div class="story"><p>1</p><p>2</p></div</div><i></i>')
 e2 = DOM('<div><a href="http://www.site.com">x</a></div>')
 
 assert list(map(u, e1('#main'                 ))) == [u(e1)]
@@ -240,6 +240,7 @@ assert list(map(u, e1('p:not(:first-child)'   ))) == [u'<p>2</p>']
 assert list(map(u, e1('div p:contains("2")'   ))) == [u'<p>2</p>']
 assert list(map(u, e1('p + p'                 ))) == [u'<p>2</p>']
 assert list(map(u, e1('p ~ p'                 ))) == [u'<p>2</p>']
+assert list(map(u, e1('i:empty'               ))) == [u'<i></i>']
 assert list(map(u, e2('*[href]'               ))) == [u'<a href="http://www.site.com">x</a>']
 assert list(map(u, e2('a[href^="http://"]'    ))) == [u'<a href="http://www.site.com">x</a>']
 assert list(map(u, e2('a[href$=".com"]'       ))) == [u'<a href="http://www.site.com">x</a>']
