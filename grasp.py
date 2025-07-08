@@ -358,7 +358,7 @@ class LazyDict(collections.abc.MutableMapping):
 # models['en'] = lambda: Perceptron('large.json')
 
 #---- IMMUTABLE -----------------------------------------------------------------------------------
-# An immutable container is hashable, typically for memoization of dicts.
+# An immutable container is hashable, typically for memoization of dicts or sets (e.g., frozenset).
 
 class frozendict(collections.abc.MutableMapping):
 
