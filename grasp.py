@@ -376,6 +376,46 @@ class PersistentDict(dict):
 # db = PersistentDict('db.json', {'k': 'v'})
 # db.save()
 
+#---- IMMUTABLE -----------------------------------------------------------------------------------
+# An immutable container is hashable, typically for memoization of dicts.
+
+class frozendict(dict):
+
+    def freeze(self, v):
+        if type(v) is dict:
+            return frozendict(v)
+        if type(v) is list:
+            return tuple(map(self.freeze, v))
+        if type(v) is set:
+            return frozenset(map(self.freeze, v))
+        else:
+            return v
+
+    def __init__(self, *args, **kwargs):
+        super().__init__((k, self.freeze(v)) for k, v in dict(*args, **kwargs).items())
+
+    def __hash__(self):
+        return hash(tuple(self.items()))
+
+    def __setitem__(self, k, v):
+        raise NotImplementedError
+    def __delitem__(self, k):
+        raise NotImplementedError
+    def __ior__(self, m):
+        raise NotImplementedError
+    def update(self, m):
+        raise NotImplementedError
+    def setdefault(self, k, v):
+        raise NotImplementedError
+    def pop(self, k):
+        raise NotImplementedError
+    def popitem(self, k):
+        raise NotImplementedError
+    def clear(self):
+        raise NotImplementedError
+
+# print(hash(frozendict({'k': ['v']})))
+
 ###################################################################################################
 
 #---- LOG -----------------------------------------------------------------------------------------
@@ -896,6 +936,12 @@ class Database(object):
             raise DatabaseError('%s' % e)
         else:
             return r
+
+    def __exit__(self, *args, **kwargs):
+        del self
+
+    def __enter__(self):
+        return self
 
     def execute(self, *args, **kwargs):
         return self(*args, **kwargs)
