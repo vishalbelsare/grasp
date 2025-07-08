@@ -2,11 +2,12 @@
 
 ##### SVG.PY ######################################################################################
 
-__version__   = '1.4'
-__license__   = 'BSD'
-__email__     = 'info@textgain.com'
-__author__    = 'Textgain'
-__copyright__ = 'Textgain'
+__version__   =  '1.4.1'
+__license__   =  'BSD'
+__credits__   = ['Tom De Smedt', 'Guy De Pauw']
+__email__     =  'info@textgain.com'
+__author__    =  'Textgain'
+__copyright__ =  'Textgain'
 
 ###################################################################################################
 
@@ -58,7 +59,7 @@ PY2 = sys.version.startswith('2')
 
 #--------------------------------------------------------------------------------------------------
 
-def dataurl(path, default='application/octet-stream'):
+def data_uri(path, default='application/octet-stream'):
     """ Returns the data URI string for the given file.
     """
     type = mimetypes.guess_type(path)[0] or default
@@ -242,34 +243,40 @@ class short(unicode):
     def __new__(cls, v, precision=1, format=None):
         if isinstance(v, (str, unicode)) and v.isdigit():
             v = int(v)
-        if isinstance(v, (str, unicode)):
+        if isinstance(v, (str, unicode)) and v:
             v = float(v)
+        if v == '':
+            v, format = 0, ''
         if v >= 1000 or type(v) is float:
             f = '%.*f'.replace('*', str(precision))
         else:
             f = '%i'
-        if v <  1e+3:
+        if v <  1000:
             n = 1, ''
-        if v >= 1e+3:
-            n = 1e+3, 'K'
-        if v >= 1e+6 - 2e+5:
-            n = 1e+6, 'M'
-        if v >= 1e+9 - 2e+8:
-            n = 1e+9, 'B'
+        if v >= 1000:
+            n = 1000, 'K'
+        if v >= 1000000 - 50000:
+            n = 1000000, 'M'
+        if v >= 1000000000 - 50000000:
+            n = 1000000000, 'B'
         if format == '%':
-            n = 1e-2, '%'
+            n = 100, '%'
+        if format == '+' and v >= 100 and v < 1000:
+            n = 100, '+'
         if format == '*':
             n = 1, u'○○○'
-        if format == '*' and v >= 1e+1:
+        if format == '*' and v >= 10:
             n = 1, u'●○○'
-        if format == '*' and v >= 1e+2:
+        if format == '*' and v >= 100:
             n = 1, u'●●○'
-        if format == '*' and v >= 1e+3:
+        if format == '*' and v >= 1000:
             n = 1, u'●●●'
 
         s = v / n[0]
         s = f % s
+        s = s if n[1]   != '+' else '%s00' % s
         s = s if format != '*' else ''
+        s = s if format != ''  else ''
         s = s + '.'
         s = s.split('.')
         s = s[0], s[1].rstrip('0')
@@ -285,16 +292,25 @@ class short(unicode):
         return s
 
     def __add__(self, v):
-        return short(self.v + v, self.p, self.f)
+        return short(self.v + getattr(v, 'v', v), self.p, self.f or getattr(v, 'f', None))
 
     def __sub__(self, v):
-        return short(self.v - v, self.p, self.f)
+        return short(self.v - getattr(v, 'v', v), self.p, self.f or getattr(v, 'f', None))
 
     def __int__(self):
         return int(float(self))
 
     def __float__(self):
         return self.v * self.n
+
+# print(short(''))               # ''
+# print(short('') + short(1000)) # '1K'
+# print(short(1000))             # '1K'
+# print(short(1000000))          # '1M'
+# print(short(0.01, format='%')) # '1%'
+# print(short(1000, format='*')) # '●●●'
+# print(short(100, format='*'))  # '●●○'
+# print(short(100, format='+'))  # '100+'
 
 def rate(v, precision=0):
     return short(v, precision, format='%')
@@ -327,7 +343,15 @@ def floor(v, m=1.0):
     v = math.floor(v / n) * n
     return v
 
-def circa(v, step=0.05, ease=True):
+def precision(v):
+    """ Returns the number of decimals.
+    """
+    # precision(1.23) => 2
+    n = str(v) + '.'
+    n = len(n.split('.')[1])
+    return n
+
+def circa(v, step=0.05, ease=False):
     """ Returns the nearest round float.
     """
     # circa(0.03) => 0.03
@@ -336,16 +360,15 @@ def circa(v, step=0.05, ease=True):
     # circa(0.07) => 0.05
     # circa(0.08) => 0.10
     # circa(0.09) => 0.10
-    n = math.log10(step)
-    n = min(n, 0)
-    n = abs(n)
-    n = int(n) + 1
-    v = float(v)
+    n = precision(step)
     if ease and v <= step:
-        return round(v, n)
+        v = circa(v, step * 0.1)
+        v = round(v, n)
+        v = int(v) if not n else v
     else:
-        return round(
-               round(v / step) * step, n + 1)
+        v = round(v / step)
+        v = round(v * step, n)
+    return v
 
 ca = circa
 
@@ -381,12 +404,6 @@ def steps(v1, v2):
         return 3
     else:
         return 2
-
-def floats(s):
-    """ Returns an iterator of floats from the string.
-    """
-    for v in re.findall(r'\d+\.?\d*|\.\d+', s): # '.5'
-        yield float(v)
 
 #---- STATISTICS ----------------------------------------------------------------------------------
 
@@ -467,20 +484,20 @@ class Color(object):
         """
         n = k.get('base', 1)
 
-        if v and isinstance(v[0], (str, unicode)):       # Color(str)
-            r, g, b, a = floats(v[0]); a*=255; n=255
-        elif len(v) == 0:                                # Color()
+        if v and isinstance(v[0], (list, tuple)):        # Color(list)
+            v = v[0]
+        if len(v) == 0:                                  # Color()
             r, g, b, a = 0, 0, 0, 0
         elif len(v) == 1 and v[0] is None:               # Color(None)
             r, g, b, a = 0, 0, 0, 0
         elif len(v) == 1 and isinstance(v[0], Color):    # Color(Color)
             r, g, b, a = v[0].r, v[0].g, v[0].b, v[0].a
         elif len(v) == 1:                                # Color(k)
-            r, g, b, a = v[0], v[0], v[0], 1
+            r, g, b, a = v[0], v[0], v[0], n
         elif len(v) == 2:                                # Color(k, a)
             r, g, b, a = v[0], v[0], v[0], v[1]
         elif len(v) == 3:                                # Color(r, g, b)
-            r, g, b, a = v[0], v[1], v[2], 1
+            r, g, b, a = v[0], v[1], v[2], n
         elif len(v) == 4:                                # Color(r, g, b, a)
             r, g, b, a = v[0], v[1], v[2], v[3]
         if k.get('mode') == HSB:                         # Color(h, s, b, a, mode=HSB)
@@ -505,10 +522,6 @@ class Color(object):
     @property
     def hsba(self):
         return colorsys.rgb_to_hsv(self.r, self.g, self.b) + (self.a,)
-
-    @property
-    def hex(self):
-        return '#%02x%02x%02x' % tuple(int(255 * v) for v in self.rgb)
 
     def rotate(self, angle=180):
         """ Returns the color rotated on the RYB color wheel.
@@ -1486,7 +1499,7 @@ class Context(list):
         # Cache image data (once):
         if not id in self._defs:
             w, h = self.imagesize(path)
-            s = dataurl(path) # 'data:image/png;base64,...'
+            s = data_uri(path) # 'data:image/png;base64,...'
             s = '<image id="%s" width="%.0f" height="%.0f" href="%s" />' % (id, w, h, s)
             self._defs[id] = s
         w = self._defs[id].split('"')[3]
