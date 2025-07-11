@@ -323,17 +323,15 @@ def retry(exception, tries, f, *args, **kwargs):
 ###################################################################################################
 
 #---- LAZY ----------------------------------------------------------------------------------------
-# A lazy container takes lambda functions as values, which are evaluated when retrieved.
+# A lazy container takes lambda functions as values, which are evaluated when first retrieved.
 
-class LazyDict(collections.abc.MutableMapping):
+class LazyDict(collections.abc.MutableMapping, dict):
 
     def __init__(self, *args, **kwargs):
         self._dict = dict(*args, **kwargs)
         self._done = set()
 
-    def __setitem__(self, k, v):
-        self._dict[k] = v
-
+    @atomic
     def __getitem__(self, k):
         v = self._dict[k]
         if not k in self._done:
@@ -341,9 +339,13 @@ class LazyDict(collections.abc.MutableMapping):
             self._done.add(k)
         return v
 
+    def __setitem__(self, k, v):
+        self._dict[k] = v
+        self._done.discard(k)
+
     def __delitem__(self, k):
         self._dict.pop(k)
-        self._done.remove(k)
+        self._done.discard(k)
 
     def __len__(self):
         return len(self._dict)
@@ -354,13 +356,16 @@ class LazyDict(collections.abc.MutableMapping):
     def __repr__(self):
         return repr(dict(self))
 
+    def copy(self):
+        raise NotImplementedError
+
 # models = LazyDict()
 # models['en'] = lambda: Perceptron('large.json')
 
 #---- IMMUTABLE -----------------------------------------------------------------------------------
 # An immutable container is hashable, typically for memoization of dicts or sets (e.g., frozenset).
 
-class frozendict(collections.abc.MutableMapping):
+class frozendict(collections.abc.MutableMapping, dict):
 
     def freeze(self, v):
         if type(v) is dict:
@@ -395,6 +400,9 @@ class frozendict(collections.abc.MutableMapping):
 
     def __repr__(self):
         return 'frozendict(%s)' % repr(dict(self))
+
+    def copy(self):
+        return self.__class__(self)
 
 # print(hash(frozendict({'k': ['v']})))
 
@@ -2823,10 +2831,10 @@ def hilite(s, words={}, style='background: #ff0{:1f};', format=max):
 class Classifier(object):
 
     def data(self):
-        raise NotImplemented # [(example, label)]
+        raise NotImplementedError # [(example, label)]
 
     def v(self, v):
-        raise NotImplemented # {}
+        raise NotImplementedError # {}
 
     def vectorized(self):
         return [(self.v(v), k) for v, k in self.data()]
