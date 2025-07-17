@@ -323,7 +323,7 @@ def retry(exception, tries, f, *args, **kwargs):
 ###################################################################################################
 
 #---- LAZY ----------------------------------------------------------------------------------------
-# A lazy container takes lambda functions as values, which are evaluated when first retrieved.
+# A lazy container takes lambda functions as values, which are only evaluated when retrieved (JIT).
 
 class LazyDict(collections.abc.MutableMapping, dict):
 
@@ -2842,10 +2842,10 @@ class Classifier(object):
     def __init__(self, path, *args, **kwargs): # model=NN
         """ Returns a classifier with a trained model.
         """
-        try:
+        if os.path.exists(path):
             with open(path, 'r') as f:
                 self.model = Model.load(f)
-        except:
+        else:
             with open(path, 'w') as f:
                 self.model = fit(self.vectorized(), *args, **kwargs)
                 self.model.save(f)
