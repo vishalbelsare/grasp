@@ -4456,7 +4456,9 @@ def download(url, data={}, headers={}, timeout=10, delay=0, cached=False):
     """ Returns the content at the given URL, as a byte string.
     """
     k = re.sub(r'&?oauth_[\w=%-]+', '', url)
-    k = hashlib.sha1(b(k)).hexdigest()[:20]
+    k = k + repr(data)
+    k = k + repr(headers)
+    k = hashlib.sha1(b(k)).hexdigest()[:24]
     k = os.path.join(CACHE, '%s.txt' % k)
 
     if not os.path.exists(CACHE):
