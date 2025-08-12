@@ -2,7 +2,7 @@
 
 ##### GRASP.PY ####################################################################################
 
-__version__   = '3.3.5'
+__version__   = '3.3.6'
 __license__   = 'BSD'
 __email__     = 'info@textgain.com'
 __author__    = 'Textgain'
@@ -1236,6 +1236,10 @@ def mround(v, m=1):
     """
     m = float(m)
     return round(v / m) * m
+
+# print(mround(1, 2)) # 0.0
+# print(mround(2, 2)) # 2.0
+# print(mround(3, 2)) # 4.0
 
 def avg(a):
     """ Returns the average (mean) of the given values.
@@ -4849,39 +4853,58 @@ def wiktionary(*args, **kwargs):
 # print(age)
 
 #---- GPT -----------------------------------------------------------------------------------------
+# The gpt() function sends a prompt to Large Language Model (LLM) ChatGPT.
+# A prompt contains instructions written in natural language, for example:
+# "Generate JSON [{name: '', gender: ''}], for the following news article"
+# "Generate a 100-word summary in English, for the following news article"
+# The input length and output length have different pricing, depending on 
+# the number of tokens that they contain, where 1 token ≈ 4 English chars.
+# More reasoning effort spends hidden (internal monologue) output tokens. 
 
 # https://platform.openai.com/signup
 # https://platform.openai.com/docs/guides/chat
+# https://platform.openai.com/docs/guides/reasoning
 
 keys['GPT'] = ''
 
 class Q(unicode): pass
 class A(unicode): pass
 
-def gpt(q, d=1, delay=1, cached=False, timeout=30, key=None, model='gpt-4.1-mini'):
+def discrete(v, a=0, b=10):
+    """ Returns the float (0.0-1.0) as an int from a to b.
+    """
+    return int(min(float(v), 1 - 1e-10) * (1 + b - a) + a)
+
+# print(discrete(0.5, 0, 10)) # 5
+
+def gpt(q, effort=0.0, timeout=30, delay=1, cached=False, key=None, model='gpt-5-mini'):
     """ Returns ChatGPT's response as a string.
     """
     if not isinstance(q, list): # [Q, A, ...] conversation
-        q = [q]
+        q = [Q(q)]
     for i, s in enumerate(q):
-        if type(s) in (Q, basestring):
+        if type(s) is Q:
             q[i] = { 'content': s, 'role': 'user'      }
-        if type(s) in (A,):
+        if type(s) is A:
             q[i] = { 'content': s, 'role': 'assistant' }
 
-    r  = 'https://api.openai.com/v1/chat/completions', {
-         'messages'      : q,
-         'temperature'   : d,
+    # Reasoning spends output tokens: https://openai.com/api/pricing
+    e = ['minimal', 'low', 'medium', 'high'][discrete(effort, 0, 3)]
+
+    r  = 'https://api.openai.com/v1/responses', {
          'model'         : model,
+         'input'         : q,
+         'reasoning'     : { 'effort': e },
+         'text'          : { 'verbosity': 'low' }, # be brief
     }, { 'Content-Type'  : 'application/json',
          'Authorization' : 'Bearer %s' % (key or keys['GPT'])
     }
     r = download(*r, delay=delay, cached=cached, timeout=timeout)
     r = json.loads(u(r))
-    n = r['usage']['total_tokens']
-    r = r['choices'][0]
-    r = r['message']
-    r = r['content']
+    n = r['usage'  ]
+    k = r['output' ][0]['id'] # reasoning id
+    r = r['output' ][1]
+    r = r['content'][0]['text']
     r = r.strip()
   # print(n)
     return r
