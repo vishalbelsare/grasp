@@ -2,7 +2,7 @@
 
 ##### GRASP.PY ####################################################################################
 
-__version__   = '3.3.6'
+__version__   = '3.3.9'
 __license__   = 'BSD'
 __email__     = 'info@textgain.com'
 __author__    = 'Textgain'
@@ -58,6 +58,7 @@ import platform
 import inspect
 import logging
 import traceback
+import tracemalloc
 import threading
 import subprocess
 import multiprocessing
@@ -330,22 +331,25 @@ class LazyDict(collections.abc.MutableMapping, dict):
     def __init__(self, *args, **kwargs):
         self._dict = dict(*args, **kwargs)
         self._done = set()
+        self._lock = Lock()
 
-    @atomic
     def __getitem__(self, k):
-        v = self._dict[k]
-        if not k in self._done:
-            self._dict[k] = v = v()
-            self._done.add(k)
-        return v
+        with self._lock: # atomic
+            v = self._dict[k]
+            if not k in self._done:
+                self._dict[k] = v = v()
+                self._done.add(k)
+            return v
 
     def __setitem__(self, k, v):
-        self._dict[k] = v
-        self._done.discard(k)
+        with self._lock:
+             self._dict[k] = v
+             self._done.discard(k)
 
     def __delitem__(self, k):
-        self._dict.pop(k)
-        self._done.discard(k)
+        with self._lock:
+             self._dict.pop(k)
+             self._done.discard(k)
 
     def __len__(self):
         return len(self._dict)
@@ -485,6 +489,27 @@ def debug(file=sys.stdout, format=SIGNED, date='%Y-%m-%d %H:%M:%S'):
 # debug()
 # debug(open(cd('log.txt'), 'a'))
 # request('https://textgain.com')
+
+#---- RAM -----------------------------------------------------------------------------------------
+
+class Trace(object):
+
+    @property
+    def mem(self):
+        return round(tracemalloc.get_traced_memory()[0] / 1024 ** 2, 2) # MB
+
+    def __enter__(self):
+        tracemalloc.start()
+        return self
+
+    def __exit__(self, *args):
+        tracemalloc.stop()
+
+trace = Trace()
+
+# with trace as t:
+#     import torch
+#     print(t.mem)
 
 ###################################################################################################
 
@@ -1129,34 +1154,42 @@ def SQL_DELETE(table, id):
 
 batches = {}
 
-class Batch(Database):
+class Batch(object):
+
+    lock1 = Lock()
+    lock2 = Lock()
 
     def __init__(self, name):
         self._name = name
-        self.queue = batches.setdefault(name, queue.Queue())
-
+        self.queue = batches.setdefault(name, [])
+    
     def append(self, *args, **kwargs):
-        self.queue.put(SQL_INSERT(*args, **kwargs))
+        with Batch.lock1:
+            self.queue.append(SQL_INSERT(*args, **kwargs))
 
     def update(self, *args, **kwargs):
-        self.queue.put(SQL_UPDATE(*args, **kwargs))
+        with Batch.lock1:
+            self.queue.append(SQL_UPDATE(*args, **kwargs))
 
     def remove(self, *args, **kwargs):
-        self.queue.put(SQL_DELETE(*args, **kwargs))
+        with Batch.lock1:
+            self.queue.append(SQL_DELETE(*args, **kwargs))
 
-    def commit(self):
+    def commit(self, timeout=10):
         """ Commits all pending transactions.
         """
-        if not self.queue.empty():
-            db = Database(self._name)
-            while not self.queue.empty():
-                sql = self.queue.get()
-                db.execute(*sql, commit=False)
-            db.commit()
-            del db
+        with Batch.lock1: # atomic
+            q = self.queue.copy(); \
+                self.queue.clear()
+        with Batch.lock2: # sequential
+            if q:
+                db = Database(self._name, timeout=timeout)
+                for v in q:
+                    db.execute(*v, commit=False)
+                db.commit()
 
     def __len__(self):
-        return self.queue.qsize()
+        return len(self.queue)
 
 # db = Batch(cd('test.db'))
 # db.append('persons', name='Tom', age=30)
@@ -4877,7 +4910,7 @@ def discrete(v, a=0, b=10):
 
 # print(discrete(0.5, 0, 10)) # 5
 
-def gpt(q, effort=0.0, timeout=30, delay=1, cached=False, key=None, model='gpt-5-mini'):
+def gpt(q, reasoning=0.0, delay=0.5, timeout=30, cached=False, debug=False, key=None, model='gpt-5-mini'):
     """ Returns ChatGPT's response as a string.
     """
     if not isinstance(q, list): # [Q, A, ...] conversation
@@ -4888,8 +4921,8 @@ def gpt(q, effort=0.0, timeout=30, delay=1, cached=False, key=None, model='gpt-5
         if type(s) is A:
             q[i] = { 'content': s, 'role': 'assistant' }
 
-    # Reasoning spends output tokens: https://openai.com/api/pricing
-    e = ['minimal', 'low', 'medium', 'high'][discrete(effort, 0, 3)]
+    # Reasoning uses extra output tokens https://openai.com/api/pricing
+    e = ['minimal', 'low', 'medium', 'high'][discrete(reasoning, 0, 3)]
 
     r  = 'https://api.openai.com/v1/responses', {
          'model'         : model,
@@ -4906,7 +4939,19 @@ def gpt(q, effort=0.0, timeout=30, delay=1, cached=False, key=None, model='gpt-5
     r = r['output' ][1]
     r = r['content'][0]['text']
     r = r.strip()
-  # print(n)
+
+    if debug: # cost?
+        I = n[ 'input_tokens']
+        O = n['output_tokens']
+        R = n['output_tokens_details']['reasoning_tokens']
+
+        if model == 'gpt-5':
+            print('I:%i O:%i R:%i = $%.4f' % (I, O - R, R, I * 1.25 / 1e6 + R * 10.0 / 1e6))
+        if model == 'gpt-5-mini':
+            print('I:%i O:%i R:%i = $%.4f' % (I, O - R, R, I * 0.25 / 1e6 + R *  2.0 / 1e6))
+        if model == 'gpt-5-nano':
+            print('I:%i O:%i R:%i = $%.4f' % (I, O - R, R, I * 0.05 / 1e6 + R *  0.4 / 1e6))
+
     return r
 
 # q = 'You are a comedian. What is Earth?'
