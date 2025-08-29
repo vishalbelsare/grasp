@@ -2,7 +2,7 @@
 
 ##### GRASP.PY ####################################################################################
 
-__version__   = '3.3.9'
+__version__   = '3.4.0'
 __license__   = 'BSD'
 __email__     = 'info@textgain.com'
 __author__    = 'Textgain'
@@ -496,7 +496,9 @@ class Trace(object):
 
     @property
     def mem(self):
-        return round(tracemalloc.get_traced_memory()[0] / 1024 ** 2, 2) # MB
+        """ Returns the current memory usage (in MB) in the with-block.
+        """
+        return round(tracemalloc.get_traced_memory()[0] / 1024 ** 2, 2)
 
     def __enter__(self):
         tracemalloc.start()
@@ -720,12 +722,23 @@ class tmp(object):
 #     for row in csv(f.name):
 #         print(row)
 
-def unzip(f):
-    """ Returns the opened .zip file.
+def unzip(path):
+    """ Returns an opened .zip file.
     """
-    f = zipfile.ZipFile(f)
+    f = zipfile.ZipFile(path)
     f = f.open(f.namelist()[0])
     return f
+
+def compress(path):
+    """ Returns a created .zip file.
+    """
+    f = zipfile.ZipFile(path + '.zip', 'w', compression=zipfile.ZIP_DEFLATED)
+    f.write(path, os.path.basename(path))
+    f.close()
+    return f.filename
+
+# with unzip(compress(__file__)) as f:
+#     print(f.read())
 
 #---- BUFFER --------------------------------------------------------------------------------------
 # Clipboard copy & paste is useful when temporary files can not be passed between applications.
@@ -2028,15 +2041,15 @@ class StochasticGradientDescent(Model):
 SGD = StochasticGradientDescent
 
 #---- BERT ----------------------------------------------------------------------------------------
-# The Bert model is a pre-trained, multilingual, Large Language Model (LLM) that can be fine-tuned.
-# The Bert model has a commit() method that will train queued examples on CPU or GPU (~3x speedup),
+# The BERT model is a pre-trained, multilingual, Large Language Model (LLM) that can be fine-tuned.
+# The BERT model has a commit() method that will train queued examples on CPU or GPU (~3x speedup),
 # iteratively minimizing loss. It can take an optional callback(model, loss=[]) for early stopping,
 # and will be called automatically on save(). It can also be called manually, for example with n=1,
 # and then saved and evaluated as a "checkpoint" before training another epoch.
 
 # The labels must be 0 or 1, and the training examples must be str.
 
-class Bert(Model):
+class BERT(Model):
 
     def __init__(self, examples=[], n=4, rate=0.0001, base='distilbert-base-multilingual-cased', **kwargs):
         """ Bidirectional Encoder Representations from Transformers learning algorithm
@@ -2120,14 +2133,16 @@ class Bert(Model):
     def load(cls, path):
         return cls(base=path)
 
+Bert = BERT
+
 # examples = [
 #     ('dogs say woof', 0),
 #     ('cats say meow', 1),
 # ]
-# m = Bert(examples, device='cpu')
+# m = BERT(examples, device='cpu')
 # m.commit(n=1, batch=32, callback=lambda m, loss: loss[-1] < 0.1, debug=True)
 # m.save('m1')
-# m = Bert.load('m1')
+# m = BERT.load('m1')
 
 #---- NAIVE BAYES ---------------------------------------------------------------------------------
 # The Naive Bayes model is a simple alternative for Perceptron (it trains very fast).
@@ -6160,7 +6175,8 @@ class App(ThreadPoolMixIn, WSGIServer):
             'method'  : env['REQUEST_METHOD'],
             'path'    : env['PATH_INFO'].encode('iso-8859-1').decode(),
             'query'   : dict(query(env)), # bugs.python.org/issue16679 
-            'headers' : dict(parse(env))
+            'headers' : dict(parse(env)),
+            'date'    : date()
         })
 
         # Set App.response (thread-safe).
