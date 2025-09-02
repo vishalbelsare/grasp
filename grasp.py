@@ -2,7 +2,7 @@
 
 ##### GRASP.PY ####################################################################################
 
-__version__   = '3.4.0'
+__version__   = '3.4.1'
 __license__   = 'BSD'
 __email__     = 'info@textgain.com'
 __author__    = 'Textgain'
@@ -976,7 +976,7 @@ class Database(object):
         """ Executes the given SQL statement.
         """
         try:
-            r = self.connection.cursor().execute(sql, values)
+            r = self.connection.execute(sql, values)
             if commit:
                 self.connection.commit()
         except Exception as e:
@@ -1033,15 +1033,15 @@ class Database(object):
             pass
 
 # db = Database(cd('test.db'), schema('persons', '#name', 'age', age=int))
-# db.append('persons', name='Tom', age=30)
-# db.append('persons', name='Guy', age=30)
+# db.append('persons', name='Bob', age=30)
+# db.append('persons', name='Amy', age=30)
 # 
 # for id, name, age in db.find('persons', age='>20'):
 #     print(name, age)
 
 def concat(a, format='%s', separator=', '):
   # concat([1, 2, 3]) => '1, 2, 3'
-    return separator.join(format % v for v in a)
+    return separator.join(format % v for v in a if v)
 
 def op(v):
   # op([1, 2, 3]) => 'in (?, ?, ?)', (1, 2, 3)
@@ -1091,42 +1091,71 @@ class le(Op):
 
 class ne(Op):
     def __call__(self):
-        s, v = op(self.v)
-        if s[:1] in '=<>':                          # ne('<=1')
-            return '!' + s, v
-        if s[:1] == '!':                            # ne('!=1')
-            return 'like ?', '%'
-        if s[:2] == 'is':                           # ne(None)
-            return 'is not' + s[2:], v
+        x, v = op(self.v)
+        if x.startswith('<>'):                      # ne('<>1')
+            return '=' + x[2:], v
+        if x.startswith('!'):                       # ne('!=1')
+            return x[1:], v
+        if x.startswith(('=', '<' , '>')):          # ne('<=1')
+            return '!' + x, v
+        if x == 'is null':                          # ne(None)
+            return 'is not null', v
         else:                                       # ne((1, 2))
-            return 'not ' + s, v
+            return 'not ' + x, v
 
 def asc(k):
     return k, 'asc'
 def desc(k):
     return k, 'desc'
 
+def conjunct(*groups, **filters):
+    return SQL_WHERE('and', *groups, **filters)
+def disjunct(*groups, **filters):
+    return SQL_WHERE('or' , *groups, **filters)
+
+all_of = conjunct
+any_of = disjunct
+
+def SQL_WHERE(operator, *groups, **filters):
+    """ Returns an SQL WHERE clause + parameters.
+    """
+    g = zip(*groups)
+    g = iter(g)
+    k_= next(g, ())
+    v_= next(g, ())
+    k_= tuple(k_)
+    v_= tuple(v_)
+    k = filters.keys()                              # ('name', 'age')
+    v = filters.values()                            # ('Bob*', '>10')
+    v = map(op, v)                                  # (('like', 'Bob%'), ('>', '10'))
+    v = zip(*v)                                     #  ('like', '>'), ('Bob%', '10')
+    v = iter(v)
+    x = next(v, ())                                 #  ('like', '>')
+    v = next(v, ())
+    v = itertools.chain(*v, *v_)
+    v = tuple(v)
+    k = tuple(k.split('#')[0] for k in k)
+    k = zip(k, x)
+    k = concat((k ), '`%s` %s', ' %s ' % operator)
+    k = concat((k,) + k_, '%s', ' %s ' % operator) or 1
+    k = '(%s)' % k
+    return k, v
+
+# print(SQL_WHERE('and', name='Bob*', age='<10'))
+
 def SQL_SELECT(table, *fields, **where):
     """ Returns an SQL SELECT statement + parameters.
     """
-    s = 'select %s '        % (concat(fields, '`%s`') or '*')
-    s+= 'from `%s` '        % table
-    s+= 'where %s '
-    s+= 'order by `%s` %s ' % where.pop('sort', ('id', 'asc'))
-    s+= 'limit %s, %s;'     % where.pop('slice', (0, -1))
-    k = where.keys()        # ['name', 'age']
-    v = where.values()      # ['Tom*', '>10']
-    v = map(op, v)          # [('like', 'Tom%'), ('>', '10')]
-    v = zip(*v)             #  ('like', '>'), ('Tom%', '10')
-    v = iter(v)
-    x = next(v, ())
-    v = next(v, ())
-    v = itertools.chain(*v)
-    k = iter(k.split('#')[0] for k in k)
-    s = s % (concat(zip(k, x), '`%s` %s', ' and ') or 1)
-    return s, tuple(v)
+    s  = 'select %s '        % (concat(fields, '`%s`') or '*')
+    s += 'from `%s` '        %  table
+    s += 'where %s '
+    s += 'order by `%s` %s ' %  where.pop('sort', asc('id'))
+    s += 'limit %s, %s;'     %  where.pop('slice', (0, -1))
+    f  = SQL_WHERE('and',    * (where.get('where'),)) if list(where) == ['where'] else \
+         SQL_WHERE('and',   **  where)
+    return s % f[0], f[1]
 
-# print(SQL_SELECT('persons', '*', age='>10', sort='age', slice=(0, 10)))
+# print(SQL_SELECT('persons', '*', age='>10', sort=asc('age'), slice=(0, 10)))
 
 def SQL_INSERT(table, **fields):
     """ Returns an SQL INSERT statement + parameters.
@@ -1137,7 +1166,7 @@ def SQL_INSERT(table, **fields):
     s = s % (table, concat(k, '`%s`'), concat('?' * len(v)))
     return s, tuple(v)
 
-# print(SQL_INSERT('persons', name='Tom', age=10))
+# print(SQL_INSERT('persons', name='Bob', age=10))
 
 def SQL_UPDATE(table, id, **fields):
     """ Returns an SQL UPDATE statement + parameters.
@@ -1148,7 +1177,7 @@ def SQL_UPDATE(table, id, **fields):
     s = s % (table, concat(k, '`%s`=?'))
     return s, tuple(v) + (id,)
 
-# print(SQL_UPDATE('persons', 1, name='Tom', age=20))
+# print(SQL_UPDATE('persons', 1, name='Bob', age=20))
 
 def SQL_DELETE(table, id):
     """ Returns an SQL DELETE statement + parameters.
@@ -1157,6 +1186,11 @@ def SQL_DELETE(table, id):
     return s, (id,)
 
 # print(SQL_DELETE('persons', 1))
+
+# print(SQL_SELECT('persons', '*', where=any_of(
+#         all_of(name='Bob*', age=lte(20)),
+#         all_of(name='Bob*', age=gte(75)),
+# )))
 
 #---- SQL ASYNC -----------------------------------------------------------------------------------
 # The SQLite engine locks when writing and other read/write operations have to wait.
