@@ -2,7 +2,7 @@
 
 ##### GRASP.PY ####################################################################################
 
-__version__   = '3.4.1'
+__version__   = '3.4.2'
 __license__   = 'BSD'
 __email__     = 'info@textgain.com'
 __author__    = 'Textgain'
@@ -1052,21 +1052,21 @@ def op(v):
         return v
     if v is None:
         return 'is null', ()
-    if isinstance(v, (int, float)):                 #  1
+    if isinstance(v, (int, float)):                  #  1
         return '= ?', (v,)
-    if isinstance(v, (set, list)):                  # [1, 2, 3]
+    if isinstance(v, (set, list)):                   # [1, 2, 3]
         return 'in (%s)' % concat('?' * len(v)), v
-    if isinstance(v, (tuple,)):                     # (1, 2)
+    if isinstance(v, (tuple,)):                      # (1, 2)
         return 'between ? and ?', v[:2]
-    if isinstance(v, REGEX):                        # re.compile('*ly')
+    if isinstance(v, REGEX):                         # re.compile('*ly')
         return 'regexp ?', (v.pattern,)
-    if isinstance(v, Op):                           # ne(1)
+    if isinstance(v, Op):                            # ne(1)
         return v()
-    if v[:2] in ('<=', '>=', '<>', '!='):           # '<>1'
+    if v[:2] in ('<=', '>=', '<>', '!='):            # '<>1'
         return '%s ?' % v[:2], (v[2:],)
-    if v[:1] in ('<' , '>', '='):                   # '<1'
+    if v[:1] in ('<' , '>', '='):                    # '<1'
         return '%s ?' % v[:1], (v[1:],)
-    if '*' in v:                                    # '*ly'
+    if '*' in v:                                     # '*ly'
         return "like ? escape '\\'", (esc(v),)
     else:
         return '= ?', (v,)
@@ -1092,16 +1092,24 @@ class le(Op):
 class ne(Op):
     def __call__(self):
         x, v = op(self.v)
-        if x.startswith('<>'):                      # ne('<>1')
+        if x.startswith('<>'):                       # ne('<>1')
             return '=' + x[2:], v
-        if x.startswith('!'):                       # ne('!=1')
+        if x.startswith('!'):                        # ne('!=1')
             return x[1:], v
-        if x.startswith(('=', '<' , '>')):          # ne('<=1')
+        if x.startswith(('=', '<' , '>')):           # ne('<=1')
             return '!' + x, v
-        if x == 'is null':                          # ne(None)
+        if x == 'is null':                           # ne(None)
             return 'is not null', v
-        else:                                       # ne((1, 2))
+        else:                                        # ne((1, 2))
             return 'not ' + x, v
+
+class alt(Op):
+    def __init__(self, v, **filters):
+        self.v = v, filters
+    def __call__(self):
+        x1, v1 = op(    self.v[0])
+        x2, v2 = all_of(self.v[1])
+        return '%s or %s' % (x1, x2), v1 + v2
 
 def asc(k):
     return k, 'asc'
@@ -1125,20 +1133,22 @@ def SQL_WHERE(operator, *groups, **filters):
     v_= next(g, ())
     k_= tuple(k_)
     v_= tuple(v_)
-    k = filters.keys()                              # ('name', 'age')
-    v = filters.values()                            # ('Bob*', '>10')
-    v = map(op, v)                                  # (('like', 'Bob%'), ('>', '10'))
-    v = zip(*v)                                     #  ('like', '>'), ('Bob%', '10')
+    k = filters.keys()                               # ('name', 'age')
+    v = filters.values()                             # ('Bob*', '>10')
+    v = map(op, v)                                   # (('like', 'Bob%'), ('>', '10'))
+    v = zip(*v)                                      #  ('like', '>'), ('Bob%', '10')
     v = iter(v)
-    x = next(v, ())                                 #  ('like', '>')
+    x = next(v, ())                                  #  ('like', '>')
     v = next(v, ())
     v = itertools.chain(*v, *v_)
     v = tuple(v)
     k = tuple(k.split('#')[0] for k in k)
     k = zip(k, x)
-    k = concat((k ), '`%s` %s', ' %s ' % operator)
-    k = concat((k,) + k_, '%s', ' %s ' % operator) or 1
-    k = '(%s)' % k
+    k = concat((k ), '(`%s` %s)', ' %s ' % operator) # wrap alt()
+    k = concat((k,) + k_ , '%s' , ' %s ' % operator) or 1
+    if len(groups ) > 1 or \
+       len(filters) > 1:
+        k = '(%s)' % k
     return k, v
 
 # print(SQL_WHERE('and', name='Bob*', age='<10'))
@@ -1188,8 +1198,8 @@ def SQL_DELETE(table, id):
 # print(SQL_DELETE('persons', 1))
 
 # print(SQL_SELECT('persons', '*', where=any_of(
-#         all_of(name='Bob*', age=lte(20)),
-#         all_of(name='Bob*', age=gte(75)),
+#         all_of(name='Bob*', age=le(20)),
+#         all_of(name='Bob*', age=ge(75)),
 # )))
 
 #---- SQL ASYNC -----------------------------------------------------------------------------------
@@ -4771,7 +4781,7 @@ class Bluesky(object):
     def search(self, q, language='', delay=1, cached=False, key=None, **kwargs):
         """ Returns an iterator of posts.
         """
-        r = 'https://public.api.bsky.app/xrpc/app.bsky.feed.searchPosts' + \
+        r = 'https://api.bsky.app/xrpc/app.bsky.feed.searchPosts' + \
             '?author=' + '' + \
             '&sort='   + 'latest' + \
             '&lang='   + language + \
