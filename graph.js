@@ -380,6 +380,7 @@ capture = function(canvas, n=1) {
 	f();
 };
 
+// Python frame parser:
 /* for i, s in enumerate(json.load(open('frames.json'))):
         s = s.split(',')[1]
         s = base64.b64decode(s)
