@@ -2,7 +2,7 @@
 
 ##### GRASP.PY ####################################################################################
 
-__version__   = '3.4.7'
+__version__   = '3.5.0'
 __license__   = 'BSD'
 __email__     = 'info@textgain.com'
 __author__    = 'Textgain'
@@ -10,7 +10,7 @@ __copyright__ = 'Textgain'
 
 ###################################################################################################
 
-# Copyright 2025 Textgain
+# Copyright 2026 Textgain
 #
 # Redistribution and use in source and binary forms, with or without modification, 
 # are permitted provided that the following conditions are met:
@@ -191,6 +191,8 @@ def cached(f):
     v = {}
     def decorator(*args, **kwargs):
         k = repr((args, kwargs))
+        if len(v) > 1000:
+            v.clear()
         if not k in v:
             v[k] = f(*args, **kwargs)
         return v[k]
@@ -3532,14 +3534,17 @@ language = lang
 Location = collections.namedtuple('Location', ('city', 'country', 'lat', 'lng'))
 
 @static(m=None)
-def loc(s, country=None):
+def loc(s, country=None, data={}):
     """ Returns a (Location, count)-dict of city names (EU).
     """
     if not loc.m:
+        m = data # {'BE': {'Brussels': (50.85, 4.35)}
+    if not loc.m and not m:
         m = ls('en-loc.json')
         m = next(m)
         m = open(m, 'rb')
         m = json.load(m)
+    if not loc.m:
         m = m.items()
         m = {k2: Location(k2, k1, *v[k2][:2]) for k1, v in m for k2 in v} 
         m = loc.m = trie(m)
@@ -3552,8 +3557,6 @@ def loc(s, country=None):
     f = [m.tag for m in f]
     f = collections.Counter(f)
     return f
-
-location = loc
 
 # for k, v in loc('Aanslag in Brussel').most_common(1):
 #     print(k, v)
@@ -5029,7 +5032,7 @@ def mediawiki(domain, q='', language='en', delay=1, cached=True, raw=False, **kw
     r += '&format=json'
     r += '&redirects=1'
     r += '&prop=%s' % kwargs.get('prop', 'text')
-    r += '&page=%s' % urllib.parse.quote(q)
+    r += '&page=%s' % urllib.parse.quote(b(q))
     r  = download(r, delay=delay, cached=cached)
     r  = json.loads(u(r))
 
@@ -5171,27 +5174,31 @@ def gpt(q, reasoning=0.0, delay=0.5, timeout=30, cached=False, debug=False, key=
 
 #---- GPS -----------------------------------------------------------------------------------------
 
-keys['GPS'] = ''
+# https://nominatim.org/release-docs/develop/api/Search/
+
+keys['GPS'] = '' # (User-Agent)
 
 Coordinates = collections.namedtuple('Coordinates', ('lat', 'lng'))
 
-def gps(q, delay=35, cached=False, key=None):
+@cached
+def gps(q, delay=2, cached=False, key=None):
     """ Returns the latitute & longitude of a location.
     """
-    r  = 'https://api.opencagedata.com/geocode/v1/json'
-    r += '?key=' + (key or keys['GPS'])
-    r += '&q=' + urllib.parse.quote(b(q or '--'))
-    r  = download(r, delay=delay, cached=cached) # 2500 / day
+    r  = 'https://nominatim.openstreetmap.org/search'
+    r += '?format=json'
+    r += '&limit=1'
+    r += '&q=' + urllib.parse.quote(b(q))
+    r  = download(r, delay=delay, cached=cached, headers={'User-Agent': key or keys['GPS']})
     r  = json.loads(u(r))
-    r  = r.get('results')
-    r  = iter(r)
-    r  = next(r, {})
-    r  = r.get('geometry', {})
-    r  = r.get('lat'), \
-         r.get('lng')
-    r  = Coordinates(*r)
-    r  = None if None in r else r
-    return r
+    try:
+        r = r[0]
+        x = r['lat']
+        y = r['lon']
+        x = float(x)
+        y = float(y)
+        return Coordinates(x, y)
+    except:
+        return
 
 # print(gps('Aalst, BE'))
 # print(gps('Aalst, NL'))
@@ -6780,7 +6787,7 @@ def cliques(g):
 # }
 # print(list(cliques(g)))
 
-def communities(g, k=4):
+def percolate(g, k=4):
     """ Returns an iterator of (overlapping) communities, largest-first,
         where each community is a set of densely connected nodes.
     """
@@ -6791,6 +6798,32 @@ def communities(g, k=4):
                 if len(c1 & c2) >= k - 1: # clique percolation
                     c2.update(c1)
             a.append(c1)
+    return reversed(sorted(a, key=len))
+
+def communities(g, iterations=100):
+    """ Returns an iterator of communities, largest-first,
+        where each community is a set of connected nodes.
+    """
+    # Label Propagation Algorithm (LPA):
+    n = nodes(g)
+    n = {k: k for k in n} # {node: label}
+    for i in range(iterations):
+        b = False
+        for k in shuffled(n):
+            if g[k]:
+                f = ( n[k] for k in g[k] )
+                f = collections.Counter(f)
+                x = f.most_common(1) # majority neighbor label
+                x = x[0]
+                x = x[0]
+                b|= n[k] != x
+                n[k] = x
+        if not b: # converged?
+            break
+    a = {}
+    for k in n:
+        a.setdefault(n[k], set()).add(k)
+    a = a.values()
     return reversed(sorted(a, key=len))
 
 def components(g):
