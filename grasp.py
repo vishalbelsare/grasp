@@ -6800,29 +6800,23 @@ def percolate(g, k=4):
             a.append(c1)
     return reversed(sorted(a, key=len))
 
-def communities(g, iterations=100):
+def communities(g, iterations=10):
     """ Returns an iterator of communities, largest-first,
         where each community is a set of connected nodes.
     """
-    # Label Propagation Algorithm (LPA):
     n = nodes(g)
-    n = {k: k for k in n} # {node: label}
+    c = {k: k for k in n} # {node: label}
     for i in range(iterations):
-        b = False
         for k in shuffled(n):
-            if g[k]:
-                f = ( n[k] for k in g[k] )
-                f = collections.Counter(f)
-                x = f.most_common(1) # majority neighbor label
-                x = x[0]
-                x = x[0]
-                b|= n[k] != x
-                n[k] = x
-        if not b: # converged?
-            break
+            f = collections.Counter()
+            for e in g[k]:
+                f[c[e]] += len(g[e])
+            for x, _ in f.most_common(1): # label propagration
+                if c[k] != x:
+                    c[k] = x
     a = {}
-    for k in n:
-        a.setdefault(n[k], set()).add(k)
+    for k in c:
+        a.setdefault(c[k], set()).add(k)
     a = a.values()
     return reversed(sorted(a, key=len))
 
