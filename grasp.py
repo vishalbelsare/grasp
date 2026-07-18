@@ -6809,8 +6809,8 @@ def communities(g, iterations=10):
     for i in range(iterations):
         for k in shuffled(n):
             f = collections.Counter()
-            for e in g[k]:
-                f[c[e]] += len(g[e])
+            for e in g.get(k, ()):
+                f[c[e]] += len(g.get(e, ()))
             for x, _ in f.most_common(1): # label propagration
                 if c[k] != x:
                     c[k] = x
@@ -6819,6 +6819,29 @@ def communities(g, iterations=10):
         a.setdefault(c[k], set()).add(k)
     a = a.values()
     return reversed(sorted(a, key=len))
+
+def aggregate(g, c, iterations=2):
+    """ Returns an iterator of aggregated communities.
+    """
+    c = enumerate(c)
+    c = dict(c)
+    x = dict()
+    y = dict()
+    a = list()
+    for i, n in c.items():
+        x.update((n, i) for n in n)
+    for i, n in c.items():
+        y[i] = set(x[n] for n in n for n in g.get(n, ())) # Louvain coarsening
+    for n in communities(y, iterations):
+        a.append(set().union(*(c[n] for n in n)))
+    return reversed(sorted(a, key=len))
+
+# g = {
+#     'a': {'b': 1},
+#     'b': {'a': 1, 'c': 1}, # A <-> B -> C
+#     'c': {}
+# }
+# print(list(aggregate(g, communities(g))))
 
 def components(g):
     """ Returns an iterator of components, largest-first,
